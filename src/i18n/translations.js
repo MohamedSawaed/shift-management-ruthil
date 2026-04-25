@@ -107,6 +107,9 @@ export const translations = {
     noMatch: 'No match.',
     notAssigned: 'Not assigned',
     availableForShifts: 'Available for shifts:',
+    onVacation: 'On vacation',
+    sendToVacation: 'Send on vacation',
+    returnFromVacation: 'Return from vacation',
 
     // Shifts
     shiftsTitle: 'Shifts',
@@ -296,6 +299,9 @@ export const translations = {
     noMatch: 'לא נמצאו תוצאות.',
     notAssigned: 'לא משובץ',
     availableForShifts: 'זמין למשמרות:',
+    onVacation: 'בחופש',
+    sendToVacation: 'שלח לחופש',
+    returnFromVacation: 'חזרה מחופש',
 
     // Shifts
     shiftsTitle: 'משמרות',

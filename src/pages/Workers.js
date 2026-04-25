@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { Plus, Trash2, Pencil, Check, X, Clock } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Clock, Palmtree } from 'lucide-react';
 
 const SHIFT_TYPES = ['Morning', 'Afternoon', 'Night', 'Friday'];
 
@@ -24,6 +24,7 @@ export default function Workers() {
   const startEdit = (w) => { setEditId(w.id); setEditName(w.name); };
   const saveEdit = (id) => { if (!editName.trim()) return; dispatch({ type: 'UPDATE_WORKER', payload: { id, name: editName.trim() } }); setEditId(null); };
   const remove = (id) => dispatch({ type: 'DELETE_WORKER', payload: id });
+  const toggleVacation = (id, current) => dispatch({ type: 'UPDATE_WORKER', payload: { id, onVacation: !current } });
 
   const getDeptName = (id) => state.departments.find((d) => d.id === id)?.name || '?';
   const getRoleName = (id) => state.roles.find((r) => r.id === id)?.name || '?';
@@ -74,7 +75,7 @@ export default function Workers() {
             const defaultAvail = (worker.availability || {}).default || SHIFT_TYPES;
 
             return (
-              <div key={worker.id} className="card card-vertical">
+              <div key={worker.id} className={`card card-vertical ${worker.onVacation ? 'card-vacation' : ''}`}>
                 {isEditing ? (
                   <div className="card-row">
                     <div className="card-edit">
@@ -86,7 +87,10 @@ export default function Workers() {
                 ) : (
                   <div className="card-row">
                     <div className="card-content">
-                      <span className="card-title">{worker.name}</span>
+                      <span className="card-title">
+                        {worker.name}
+                        {worker.onVacation && <span className="vacation-badge"><Palmtree size={11} /> {t('onVacation')}</span>}
+                      </span>
                       {assigns.length > 0 ? (
                         <div className="chip-group chip-group-sm">
                           {assigns.map((a) => (
@@ -101,6 +105,13 @@ export default function Workers() {
                       )}
                     </div>
                     <div className="card-actions">
+                      <button
+                        className={`btn-icon ${worker.onVacation ? 'btn-icon-vacation' : ''}`}
+                        onClick={() => toggleVacation(worker.id, worker.onVacation)}
+                        title={worker.onVacation ? t('returnFromVacation') : t('sendToVacation')}
+                      >
+                        <Palmtree size={15} />
+                      </button>
                       <button className="btn-icon" onClick={() => setAvailId(showAvail ? null : worker.id)}><Clock size={15} /></button>
                       <button className="btn-icon" onClick={() => startEdit(worker)}><Pencil size={15} /></button>
                       <button className="btn-icon btn-danger" onClick={() => remove(worker.id)}><Trash2 size={15} /></button>

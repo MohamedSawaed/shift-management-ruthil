@@ -2544,6 +2544,37 @@ select.input {
   border-radius: var(--radius-sm);
 }
 
+/* ─── Vacation ─── */
+
+.card-vacation {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.vacation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #fb923c;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.btn-icon-vacation {
+  color: #fb923c !important;
+  background: #fff7ed !important;
+}
+
+.btn-icon-vacation:hover {
+  background: #fed7aa !important;
+}
+
 /* ─── Availability panel ─── */
 
 .avail-panel {

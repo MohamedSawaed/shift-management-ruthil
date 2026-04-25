@@ -98,6 +98,7 @@ export default function Shifts() {
     const relevantDeptIds = new Set([...selectedDepts, ...parentIds]);
 
     return state.workers.filter((w) => {
+      if (w.onVacation) return false;
       if (busyWorkerIds.has(w.id)) return false;
       if (!isWorkerAvailable(w, date, shiftName)) return false;
       if (selectedDepts.length === 0) return true;
