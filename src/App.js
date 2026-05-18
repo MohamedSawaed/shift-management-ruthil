@@ -9,7 +9,8 @@ import Workers from './pages/Workers';
 import Shifts from './pages/Shifts';
 import Planner from './pages/Planner';
 import Analytics from './pages/Analytics';
-import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages } from 'lucide-react';
+import Settings from './pages/Settings';
+import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
     { to: '/roles', icon: Wrench, label: t('navRoles') },
     { to: '/planner', icon: CalendarDays, label: t('navPlanner') },
     { to: '/analytics', icon: BarChart3, label: t('navAnalytics') },
+    { to: '/settings', icon: SettingsIcon, label: t('navSettings') },
   ];
 
   const allNav = [
@@ -38,6 +40,7 @@ export default function App() {
     { to: '/shifts', icon: CalendarClock, label: t('navShifts') },
     { to: '/planner', icon: CalendarDays, label: t('navPlanner') },
     { to: '/analytics', icon: BarChart3, label: t('navAnalytics') },
+    { to: '/settings', icon: SettingsIcon, label: t('navSettings') },
   ];
 
   return (
@@ -81,6 +84,7 @@ export default function App() {
               <Route path="/shifts" element={<Shifts />} />
               <Route path="/planner" element={<Planner />} />
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
 

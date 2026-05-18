@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useCallback } from 'react';
 import { v4 as uuid } from 'uuid';
+import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generateSyncCode } from '../lib/supabase';
+
+const SYNC_CODE_KEY = 'myshift_sync_code';
 
 const AppContext = createContext();
 
@@ -49,6 +52,22 @@ function loadState() {
 
 function reducer(state, action) {
   switch (action.type) {
+    case 'REPLACE_STATE':
+      return {
+        ...defaultState,
+        ...action.payload,
+        // Re-apply normalizations
+        workers: (action.payload.workers || []).map((w) => ({
+          ...w,
+          assignments: Array.isArray(w.assignments) ? w.assignments : [],
+          availability: w.availability || {},
+        })),
+        departments: (action.payload.departments || []).map((d) => ({
+          ...d,
+          requirements: d.requirements && typeof d.requirements === 'object' ? d.requirements : {},
+        })),
+      };
+
     case 'ADD_ROLE':
       return { ...state, roles: [...state.roles, { id: uuid(), name: action.payload.name, priority: state.roles.length + 1 }] };
     case 'UPDATE_ROLE':
@@ -130,8 +149,128 @@ function reducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, loadState() || defaultState);
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
-  return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
+  const [syncCode, setSyncCodeState] = useState(() => {
+    try { return localStorage.getItem(SYNC_CODE_KEY) || null; } catch { return null; }
+  });
+  const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | error | offline
+  const [lastSynced, setLastSynced] = useState(null);
+  const skipNextSyncRef = useRef(false);
+  const pushTimerRef = useRef(null);
+
+  // Always persist to localStorage (offline-first)
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  // On first load: if cloud enabled and we have a sync code, pull latest
+  useEffect(() => {
+    if (!isCloudEnabled() || !syncCode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setSyncStatus('syncing');
+        const remote = await pullWorkspace(syncCode);
+        if (cancelled) return;
+        if (remote && remote.data) {
+          skipNextSyncRef.current = true;
+          dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+          setLastSynced(new Date());
+        }
+        setSyncStatus('idle');
+      } catch (err) {
+        console.error('Pull failed:', err);
+        if (!cancelled) setSyncStatus('error');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncCode]);
+
+  // On state change: debounced push to cloud
+  useEffect(() => {
+    if (!isCloudEnabled() || !syncCode) return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(async () => {
+      try {
+        setSyncStatus('syncing');
+        await pushWorkspace(syncCode, state);
+        setLastSynced(new Date());
+        setSyncStatus('idle');
+      } catch (err) {
+        console.error('Push failed:', err);
+        setSyncStatus('error');
+      }
+    }, 800);
+    return () => { if (pushTimerRef.current) clearTimeout(pushTimerRef.current); };
+  }, [state, syncCode]);
+
+  // ─── Sync controls ───
+  const setSyncCode = useCallback((code) => {
+    if (code) {
+      localStorage.setItem(SYNC_CODE_KEY, code);
+    } else {
+      localStorage.removeItem(SYNC_CODE_KEY);
+    }
+    setSyncCodeState(code);
+  }, []);
+
+  const createNewSyncCode = useCallback(async () => {
+    if (!isCloudEnabled()) return null;
+    const code = generateSyncCode();
+    try {
+      setSyncStatus('syncing');
+      await createWorkspace(code, state);
+      setSyncCode(code);
+      setLastSynced(new Date());
+      setSyncStatus('idle');
+      return code;
+    } catch (err) {
+      console.error('Create failed:', err);
+      setSyncStatus('error');
+      return null;
+    }
+  }, [state, setSyncCode]);
+
+  const connectToSyncCode = useCallback(async (code) => {
+    if (!isCloudEnabled() || !code) return { ok: false, error: 'no_cloud' };
+    try {
+      setSyncStatus('syncing');
+      const remote = await pullWorkspace(code);
+      if (!remote) {
+        setSyncStatus('idle');
+        return { ok: false, error: 'not_found' };
+      }
+      skipNextSyncRef.current = true;
+      dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+      setSyncCode(code);
+      setLastSynced(new Date());
+      setSyncStatus('idle');
+      return { ok: true };
+    } catch (err) {
+      console.error('Connect failed:', err);
+      setSyncStatus('error');
+      return { ok: false, error: 'network' };
+    }
+  }, [setSyncCode]);
+
+  const disconnectSync = useCallback(() => {
+    setSyncCode(null);
+  }, [setSyncCode]);
+
+  return (
+    <AppContext.Provider value={{
+      state, dispatch,
+      syncCode, syncStatus, lastSynced,
+      createNewSyncCode, connectToSyncCode, disconnectSync,
+      cloudEnabled: isCloudEnabled(),
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
 }
 
 export function useApp() {
