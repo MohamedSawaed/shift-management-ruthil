@@ -3,10 +3,12 @@ import { v4 as uuid } from 'uuid';
 import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generateSyncCode } from '../lib/supabase';
 
 const SYNC_CODE_KEY = 'myshift_sync_code';
+const LAST_MODIFIED_KEY = 'myshift_last_modified';
 
 const AppContext = createContext();
 
 const STORAGE_KEY = 'myshift_data_v3';
+const BACKUP_KEY = 'myshift_data_v3_backup';
 
 const defaultState = {
   roles: [],
@@ -21,6 +23,23 @@ const defaultState = {
   },
 };
 
+function normalizeParsed(parsed) {
+  return {
+    roles: Array.isArray(parsed.roles) ? parsed.roles : [],
+    departments: (Array.isArray(parsed.departments) ? parsed.departments : []).map((d) => ({
+      ...d,
+      requirements: d.requirements && typeof d.requirements === 'object' ? d.requirements : {},
+    })),
+    workers: (Array.isArray(parsed.workers) ? parsed.workers : []).map((w) => ({
+      ...w,
+      assignments: Array.isArray(w.assignments) ? w.assignments : [],
+      availability: w.availability || {},
+    })),
+    shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
+    shiftTimes: { ...defaultState.shiftTimes, ...(parsed.shiftTimes || {}) },
+  };
+}
+
 function loadState() {
   try {
     localStorage.removeItem('myshift_data');
@@ -28,24 +47,16 @@ function loadState() {
 
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        roles: Array.isArray(parsed.roles) ? parsed.roles : [],
-        departments: (Array.isArray(parsed.departments) ? parsed.departments : []).map((d) => ({
-          ...d,
-          requirements: d.requirements && typeof d.requirements === 'object' ? d.requirements : {},
-        })),
-        workers: (Array.isArray(parsed.workers) ? parsed.workers : []).map((w) => ({
-          ...w,
-          assignments: Array.isArray(w.assignments) ? w.assignments : [],
-          availability: w.availability || {},
-        })),
-        shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
-        shiftTimes: { ...defaultState.shiftTimes, ...(parsed.shiftTimes || {}) },
-      };
+      return normalizeParsed(JSON.parse(raw));
     }
   } catch {
-    localStorage.removeItem(STORAGE_KEY);
+    // Primary storage is corrupted — try the backup copy before giving up on the data.
+    try {
+      const backup = localStorage.getItem(BACKUP_KEY);
+      if (backup) return normalizeParsed(JSON.parse(backup));
+    } catch {
+      // fall through
+    }
   }
   return null;
 }
@@ -156,13 +167,38 @@ export function AppProvider({ children }) {
   const [lastSynced, setLastSynced] = useState(null);
   const skipNextSyncRef = useRef(false);
   const pushTimerRef = useRef(null);
+  const isFirstPersistRef = useRef(true);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
-  // Always persist to localStorage (offline-first)
+  // Always persist to localStorage (offline-first). Keep a backup copy of the
+  // previous snapshot so a corrupted write can be recovered from.
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      const prev = localStorage.getItem(STORAGE_KEY);
+      if (prev) localStorage.setItem(BACKUP_KEY, prev);
+    } catch {
+      // ignore — backup is best-effort
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.error('Failed to save locally:', err);
+    }
+
+    // Track when the user actually changed data on this device (not on initial
+    // load, and not right after we replaced local state with a cloud pull).
+    if (isFirstPersistRef.current) {
+      isFirstPersistRef.current = false;
+    } else if (!skipNextSyncRef.current) {
+      try { localStorage.setItem(LAST_MODIFIED_KEY, String(Date.now())); } catch { /* ignore */ }
+    }
   }, [state]);
 
-  // On first load: if cloud enabled and we have a sync code, pull latest
+  // On first load: if cloud enabled and we have a sync code, pull latest —
+  // but never clobber local edits the cloud doesn't have yet. If this device
+  // has unsynced changes (e.g. the last push never made it out before the tab
+  // closed), push them up instead of overwriting them with the older cloud copy.
   useEffect(() => {
     if (!isCloudEnabled() || !syncCode) return;
     let cancelled = false;
@@ -172,8 +208,14 @@ export function AppProvider({ children }) {
         const remote = await pullWorkspace(syncCode);
         if (cancelled) return;
         if (remote && remote.data) {
-          skipNextSyncRef.current = true;
-          dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+          const localModified = Number(localStorage.getItem(LAST_MODIFIED_KEY) || 0);
+          const remoteModified = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
+          if (localModified && localModified > remoteModified) {
+            await pushWorkspace(syncCode, stateRef.current);
+          } else {
+            skipNextSyncRef.current = true;
+            dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+          }
           setLastSynced(new Date());
         }
         setSyncStatus('idle');
@@ -207,6 +249,26 @@ export function AppProvider({ children }) {
     }, 800);
     return () => { if (pushTimerRef.current) clearTimeout(pushTimerRef.current); };
   }, [state, syncCode]);
+
+  // Flush any pending push immediately when the tab is being hidden/closed, so a
+  // quick refresh or tab-close right after an edit doesn't lose the debounced push.
+  useEffect(() => {
+    if (!isCloudEnabled() || !syncCode) return;
+    const flush = () => {
+      if (pushTimerRef.current) {
+        clearTimeout(pushTimerRef.current);
+        pushTimerRef.current = null;
+        pushWorkspace(syncCode, stateRef.current).catch((err) => console.error('Flush push failed:', err));
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [syncCode]);
 
   // ─── Sync controls ───
   const setSyncCode = useCallback((code) => {
