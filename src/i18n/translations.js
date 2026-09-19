@@ -139,6 +139,13 @@ export const translations = {
     onVacation: 'On vacation',
     sendToVacation: 'Send on vacation',
     returnFromVacation: 'Return from vacation',
+    payAndTax: 'Pay & Tax',
+    hourlyRate: 'Hourly rate',
+    taxPercent: 'Tax %',
+    deductions: 'Deductions',
+    savePay: 'Save',
+    perHour: '/hr',
+    taxShort: 'tax',
 
     // Shifts
     shiftsTitle: 'Shifts',
@@ -360,6 +367,13 @@ export const translations = {
     onVacation: 'בחופש',
     sendToVacation: 'שלח לחופש',
     returnFromVacation: 'חזרה מחופש',
+    payAndTax: 'שכר ומס',
+    hourlyRate: 'תעריף שעתי',
+    taxPercent: 'אחוז מס',
+    deductions: 'ניכויים',
+    savePay: 'שמור',
+    perHour: '/שעה',
+    taxShort: 'מס',
 
     // Shifts
     shiftsTitle: 'משמרות',

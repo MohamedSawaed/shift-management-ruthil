@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { Plus, Trash2, Pencil, Check, X, Clock, Palmtree } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Clock, Palmtree, DollarSign } from 'lucide-react';
 
 const SHIFT_TYPES = ['Morning', 'Afternoon', 'Night', 'Friday'];
 
@@ -12,6 +12,8 @@ export default function Workers() {
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState('');
   const [availId, setAvailId] = useState(null);
+  const [payId, setPayId] = useState(null);
+  const [payDraft, setPayDraft] = useState({ hourlyRate: '', taxPercent: '', deductions: '' });
   const [search, setSearch] = useState('');
 
   const add = (e) => {
@@ -25,6 +27,27 @@ export default function Workers() {
   const saveEdit = (id) => { if (!editName.trim()) return; dispatch({ type: 'UPDATE_WORKER', payload: { id, name: editName.trim() } }); setEditId(null); };
   const remove = (id) => dispatch({ type: 'DELETE_WORKER', payload: id });
   const toggleVacation = (id, current) => dispatch({ type: 'UPDATE_WORKER', payload: { id, onVacation: !current } });
+
+  const openPay = (w) => {
+    setPayId(w.id);
+    setPayDraft({
+      hourlyRate: w.hourlyRate ? String(w.hourlyRate) : '',
+      taxPercent: w.taxPercent ? String(w.taxPercent) : '',
+      deductions: w.deductions ? String(w.deductions) : '',
+    });
+  };
+  const savePay = (id) => {
+    dispatch({
+      type: 'UPDATE_WORKER',
+      payload: {
+        id,
+        hourlyRate: parseFloat(payDraft.hourlyRate) || 0,
+        taxPercent: parseFloat(payDraft.taxPercent) || 0,
+        deductions: parseFloat(payDraft.deductions) || 0,
+      },
+    });
+    setPayId(null);
+  };
 
   const getDeptName = (id) => state.departments.find((d) => d.id === id)?.name || '?';
   const getRoleName = (id) => state.roles.find((r) => r.id === id)?.name || '?';
@@ -72,6 +95,7 @@ export default function Workers() {
             const assigns = worker.assignments || [];
             const isEditing = editId === worker.id;
             const showAvail = availId === worker.id;
+            const showPay = payId === worker.id;
             const defaultAvail = (worker.availability || {}).default || SHIFT_TYPES;
 
             return (
@@ -103,6 +127,13 @@ export default function Workers() {
                       ) : (
                         <span className="card-meta">{t('notAssigned')}</span>
                       )}
+                      {worker.hourlyRate > 0 && (
+                        <span className="card-meta pay-summary">
+                          ${worker.hourlyRate}{t('perHour')}
+                          {worker.taxPercent > 0 && ` · ${worker.taxPercent}% ${t('taxShort')}`}
+                          {worker.deductions > 0 && ` · -$${worker.deductions}`}
+                        </span>
+                      )}
                     </div>
                     <div className="card-actions">
                       <button
@@ -113,6 +144,7 @@ export default function Workers() {
                         <Palmtree size={15} />
                       </button>
                       <button className="btn-icon" onClick={() => setAvailId(showAvail ? null : worker.id)}><Clock size={15} /></button>
+                      <button className="btn-icon" onClick={() => (showPay ? setPayId(null) : openPay(worker))} title={t('payAndTax')}><DollarSign size={15} /></button>
                       <button className="btn-icon" onClick={() => startEdit(worker)}><Pencil size={15} /></button>
                       <button className="btn-icon btn-danger" onClick={() => remove(worker.id)}><Trash2 size={15} /></button>
                     </div>
@@ -129,6 +161,41 @@ export default function Workers() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {showPay && !isEditing && (
+                  <div className="pay-panel">
+                    <span className="avail-label">{t('payAndTax')}</span>
+                    <div className="pay-fields">
+                      <label className="pay-field">
+                        {t('hourlyRate')}
+                        <input
+                          type="number" min="0" step="0.01" className="input"
+                          value={payDraft.hourlyRate}
+                          onChange={(e) => setPayDraft({ ...payDraft, hourlyRate: e.target.value })}
+                        />
+                      </label>
+                      <label className="pay-field">
+                        {t('taxPercent')}
+                        <input
+                          type="number" min="0" max="100" step="0.1" className="input"
+                          value={payDraft.taxPercent}
+                          onChange={(e) => setPayDraft({ ...payDraft, taxPercent: e.target.value })}
+                        />
+                      </label>
+                      <label className="pay-field">
+                        {t('deductions')}
+                        <input
+                          type="number" min="0" step="0.01" className="input"
+                          value={payDraft.deductions}
+                          onChange={(e) => setPayDraft({ ...payDraft, deductions: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={() => savePay(worker.id)}>
+                      <Check size={14} /> {t('savePay')}
+                    </button>
                   </div>
                 )}
               </div>

@@ -34,6 +34,9 @@ function normalizeParsed(parsed) {
       ...w,
       assignments: Array.isArray(w.assignments) ? w.assignments : [],
       availability: w.availability || {},
+      hourlyRate: typeof w.hourlyRate === 'number' ? w.hourlyRate : 0,
+      taxPercent: typeof w.taxPercent === 'number' ? w.taxPercent : 0,
+      deductions: typeof w.deductions === 'number' ? w.deductions : 0,
     })),
     shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
     shiftTimes: { ...defaultState.shiftTimes, ...(parsed.shiftTimes || {}) },
@@ -72,6 +75,9 @@ function reducer(state, action) {
           ...w,
           assignments: Array.isArray(w.assignments) ? w.assignments : [],
           availability: w.availability || {},
+          hourlyRate: typeof w.hourlyRate === 'number' ? w.hourlyRate : 0,
+          taxPercent: typeof w.taxPercent === 'number' ? w.taxPercent : 0,
+          deductions: typeof w.deductions === 'number' ? w.deductions : 0,
         })),
         departments: (action.payload.departments || []).map((d) => ({
           ...d,
@@ -137,7 +143,15 @@ function reducer(state, action) {
       return { ...state, departments: action.payload };
 
     case 'ADD_WORKER':
-      return { ...state, workers: [...state.workers, { id: uuid(), name: action.payload.name, assignments: action.payload.assignments || [], availability: action.payload.availability || {} }] };
+      return { ...state, workers: [...state.workers, {
+        id: uuid(),
+        name: action.payload.name,
+        assignments: action.payload.assignments || [],
+        availability: action.payload.availability || {},
+        hourlyRate: action.payload.hourlyRate || 0,
+        taxPercent: action.payload.taxPercent || 0,
+        deductions: action.payload.deductions || 0,
+      }] };
     case 'UPDATE_WORKER':
       return { ...state, workers: state.workers.map((w) => w.id === action.payload.id ? { ...w, ...action.payload } : w) };
     case 'DELETE_WORKER':
