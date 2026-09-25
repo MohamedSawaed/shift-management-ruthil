@@ -146,6 +146,7 @@ export const translations = {
     savePay: 'Save',
     perHour: '/hr',
     taxShort: 'tax',
+    netPay: 'Net pay',
 
     // Shifts
     shiftsTitle: 'Shifts',
@@ -374,6 +375,7 @@ export const translations = {
     savePay: 'שמור',
     perHour: '/שעה',
     taxShort: 'מס',
+    netPay: 'שכר נטו',
 
     // Shifts
     shiftsTitle: 'משמרות',

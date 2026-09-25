@@ -49,6 +49,15 @@ export default function Workers() {
     setPayId(null);
   };
 
+  // Net pay = hourly rate after tax %, minus flat deductions. Always derived
+  // live from the saved rate/tax/deductions rather than stored separately, so
+  // it can never go stale or "unsave" itself.
+  const netPay = (w) => {
+    const gross = w.hourlyRate || 0;
+    const afterTax = gross - (gross * (w.taxPercent || 0)) / 100;
+    return afterTax - (w.deductions || 0);
+  };
+
   const getDeptName = (id) => state.departments.find((d) => d.id === id)?.name || '?';
   const getRoleName = (id) => state.roles.find((r) => r.id === id)?.name || '?';
 
@@ -127,11 +136,12 @@ export default function Workers() {
                       ) : (
                         <span className="card-meta">{t('notAssigned')}</span>
                       )}
-                      {worker.hourlyRate > 0 && (
+                      {(worker.hourlyRate > 0 || worker.taxPercent > 0 || worker.deductions > 0) && (
                         <span className="card-meta pay-summary">
-                          ${worker.hourlyRate}{t('perHour')}
+                          {worker.hourlyRate > 0 && `$${worker.hourlyRate}${t('perHour')}`}
                           {worker.taxPercent > 0 && ` · ${worker.taxPercent}% ${t('taxShort')}`}
                           {worker.deductions > 0 && ` · -$${worker.deductions}`}
+                          {worker.hourlyRate > 0 && ` · ${t('netPay')}: $${netPay(worker).toFixed(2)}${t('perHour')}`}
                         </span>
                       )}
                     </div>
@@ -192,6 +202,13 @@ export default function Workers() {
                           onChange={(e) => setPayDraft({ ...payDraft, deductions: e.target.value })}
                         />
                       </label>
+                    </div>
+                    <div className="pay-net-preview">
+                      {t('netPay')}: <strong>${netPay({
+                        hourlyRate: parseFloat(payDraft.hourlyRate) || 0,
+                        taxPercent: parseFloat(payDraft.taxPercent) || 0,
+                        deductions: parseFloat(payDraft.deductions) || 0,
+                      }).toFixed(2)}{t('perHour')}</strong>
                     </div>
                     <button className="btn btn-primary btn-sm" onClick={() => savePay(worker.id)}>
                       <Check size={14} /> {t('savePay')}

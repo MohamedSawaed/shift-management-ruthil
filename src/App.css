@@ -2782,6 +2782,15 @@ select.input {
   opacity: 0.75;
 }
 
+.pay-net-preview {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.pay-net-preview strong {
+  color: var(--text);
+}
+
 /* ─── Drag & Drop in shifts ─── */
 
 .result-toolbar {
