@@ -155,6 +155,29 @@ html[dir="rtl"] input[type="time"] {
   max-width: 960px;
 }
 
+.sync-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1.25rem;
+  border-radius: var(--radius);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.sync-error-banner a {
+  margin-left: auto;
+  color: #b91c1c;
+  text-decoration: underline;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* ─── Sidebar ─── */
 
 .sidebar {

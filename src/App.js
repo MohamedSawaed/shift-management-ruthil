@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
+import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom';
+import { AppProvider, useApp } from './context/AppContext';
 import { useLang } from './i18n/LangContext';
 import Dashboard from './pages/Dashboard';
 import Roles from './pages/Roles';
@@ -10,8 +10,25 @@ import Shifts from './pages/Shifts';
 import Planner from './pages/Planner';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
-import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
 import './App.css';
+
+// Cloud sync failing (e.g. a paused Supabase project) used to be visible only
+// as a small status dot on the Settings page — easy to miss entirely. Surface
+// it everywhere so it's obvious something needs attention, while making clear
+// that local data on this device is unaffected.
+function SyncErrorBanner() {
+  const { cloudEnabled, syncCode, syncStatus } = useApp();
+  const { t } = useLang();
+  if (!cloudEnabled || !syncCode || syncStatus !== 'error') return null;
+  return (
+    <div className="sync-error-banner">
+      <AlertTriangle size={16} />
+      <span>{t('syncErrorBanner')}</span>
+      <Link to="/settings">{t('navSettings')}</Link>
+    </div>
+  );
+}
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -76,6 +93,7 @@ export default function App() {
           {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
           <main className="main">
+            <SyncErrorBanner />
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/roles" element={<Roles />} />
