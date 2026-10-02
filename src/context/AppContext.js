@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useCallback } from 'react';
 import { v4 as uuid } from 'uuid';
-import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generateSyncCode } from '../lib/supabase';
+import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generateSyncCode, flushPushWorkspace } from '../lib/supabase';
 
 const SYNC_CODE_KEY = 'myshift_sync_code';
 const LAST_MODIFIED_KEY = 'myshift_last_modified';
@@ -266,14 +266,17 @@ export function AppProvider({ children }) {
 
   // Flush any pending push immediately when the tab is being hidden/closed, so a
   // quick refresh or tab-close right after an edit doesn't lose the debounced push.
+  // A normal fetch (what pushWorkspace uses) isn't guaranteed to finish once the
+  // page starts unloading, so this always also fires a keepalive request that the
+  // browser will let complete in the background even after the page is gone.
   useEffect(() => {
     if (!isCloudEnabled() || !syncCode) return;
     const flush = () => {
       if (pushTimerRef.current) {
         clearTimeout(pushTimerRef.current);
         pushTimerRef.current = null;
-        pushWorkspace(syncCode, stateRef.current).catch((err) => console.error('Flush push failed:', err));
       }
+      flushPushWorkspace(syncCode, stateRef.current);
     };
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
     window.addEventListener('pagehide', flush);

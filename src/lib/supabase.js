@@ -56,3 +56,30 @@ export async function createWorkspace(syncCode, dataBlob) {
     .insert({ id: syncCode, data: dataBlob });
   if (error) throw error;
 }
+
+// A plain `fetch` kicked off from a pagehide/visibilitychange handler is not
+// guaranteed to finish before the browser tears the page down — it's a very
+// common way for "the last edit before closing the app" to silently never
+// reach the server. `keepalive: true` tells the browser to let the request
+// complete in the background even after the page is gone (subject to a
+// small body-size limit, fine for our JSON payloads). supabase-js doesn't
+// expose a way to set that flag, so this talks to the REST endpoint
+// directly for just this one case.
+export function flushPushWorkspace(syncCode, dataBlob) {
+  if (!url || !anonKey || !syncCode) return;
+  try {
+    fetch(`${url}/rest/v1/workspaces?on_conflict=id`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({ id: syncCode, data: dataBlob, updated_at: new Date().toISOString() }),
+    }).catch(() => { /* best-effort; next sync will catch up */ });
+  } catch {
+    // ignore — this is a best-effort safety net, not the primary sync path
+  }
+}
