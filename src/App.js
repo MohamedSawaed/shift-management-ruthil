@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, NavLink, Link, useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { useLang } from './i18n/LangContext';
+import { useTheme } from './lib/theme';
 import Dashboard from './pages/Dashboard';
 import Roles from './pages/Roles';
 import Departments from './pages/Departments';
@@ -10,45 +11,61 @@ import Shifts from './pages/Shifts';
 import Planner from './pages/Planner';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
-import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon, AlertTriangle, Sun, Moon } from 'lucide-react';
+import {
+  Home, CalendarPlus, CalendarDays, Users, Building2, BadgeCheck, BarChart3, Settings as SettingsIcon,
+  MoreHorizontal, Languages, Sun, Moon, AlertTriangle, CalendarClock, Plus, X,
+} from 'lucide-react';
 import './App.css';
 
-const THEME_KEY = 'myshift_theme';
+// Navigation grouped by what you're doing, rather than one flat list.
+const NAV_GROUPS = [
+  { items: [{ to: '/', icon: Home, key: 'navToday' }] },
+  { labelKey: 'navGroupSchedule', items: [
+    { to: '/shifts', icon: CalendarPlus, key: 'navBuild' },
+    { to: '/planner', icon: CalendarDays, key: 'navWeek' },
+  ] },
+  { labelKey: 'navGroupTeam', items: [
+    { to: '/workers', icon: Users, key: 'navWorkers' },
+    { to: '/departments', icon: Building2, key: 'navDepartments' },
+    { to: '/roles', icon: BadgeCheck, key: 'navRoles' },
+  ] },
+  { labelKey: 'navGroupInsights', items: [{ to: '/analytics', icon: BarChart3, key: 'navAnalytics' }] },
+];
 
-// Defaults to following the OS/browser color scheme (no explicit choice
-// saved yet), and keeps tracking it live if the person never overrides it.
-// Toggling saves an explicit preference that wins from then on.
-function useTheme() {
-  const [explicit, setExplicit] = useState(() => {
-    try { return localStorage.getItem(THEME_KEY); } catch { return null; }
-  });
-  const [systemDark, setSystemDark] = useState(() => {
-    try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch { return false; }
-  });
+const MORE_ITEMS = [
+  { to: '/departments', icon: Building2, key: 'navDepartments' },
+  { to: '/roles', icon: BadgeCheck, key: 'navRoles' },
+  { to: '/analytics', icon: BarChart3, key: 'navAnalytics' },
+  { to: '/settings', icon: SettingsIcon, key: 'navSettings' },
+];
 
-  useEffect(() => {
-    let mq;
-    try { mq = window.matchMedia('(prefers-color-scheme: dark)'); } catch { return; }
-    const handler = (e) => setSystemDark(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+function Brand() {
+  const { t } = useLang();
+  return (
+    <Link to="/" className="brand">
+      <span className="brand-mark"><CalendarClock size={18} strokeWidth={2.4} /></span>
+      <span className="brand-name">{t('appName')}</span>
+    </Link>
+  );
+}
 
-  const isDark = explicit ? explicit === 'dark' : systemDark;
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (explicit) root.setAttribute('data-theme', explicit);
-    else root.removeAttribute('data-theme');
-    try {
-      if (explicit) localStorage.setItem(THEME_KEY, explicit);
-      else localStorage.removeItem(THEME_KEY);
-    } catch { /* ignore */ }
-  }, [explicit]);
-
-  const toggle = useCallback(() => setExplicit(isDark ? 'light' : 'dark'), [isDark]);
-
-  return { isDark, toggle };
+function SyncPill() {
+  const { cloudEnabled, syncCode, syncStatus } = useApp();
+  const { t } = useLang();
+  if (!cloudEnabled) return null;
+  let tone = 'off';
+  let label = t('localOnly');
+  if (syncCode) {
+    if (syncStatus === 'error') { tone = 'error'; label = t('syncIssue'); }
+    else if (syncStatus === 'syncing') { tone = 'syncing'; label = t('syncing'); }
+    else { tone = 'ok'; label = t('synced'); }
+  }
+  return (
+    <Link to="/settings" className={`sync-pill sync-pill-${tone}`} title={label}>
+      <span className="sync-pill-dot" />
+      <span className="sync-pill-label">{label}</span>
+    </Link>
+  );
 }
 
 // Cloud sync failing (e.g. a paused Supabase project) used to be visible only
@@ -60,7 +77,7 @@ function SyncErrorBanner() {
   const { t } = useLang();
   if (!cloudEnabled || !syncCode || syncStatus !== 'error') return null;
   return (
-    <div className="sync-error-banner">
+    <div className="sync-error-banner" role="status">
       <AlertTriangle size={16} />
       <span>{t('syncErrorBanner')}</span>
       <Link to="/settings">{t('navSettings')}</Link>
@@ -68,122 +85,160 @@ function SyncErrorBanner() {
   );
 }
 
-export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const { t, lang, toggle } = useLang();
+function ThemeLangButtons({ variant = 'icon' }) {
+  const { t, lang, toggle: toggleLang } = useLang();
   const { isDark, toggle: toggleTheme } = useTheme();
+  return (
+    <div className={`pref-buttons pref-buttons-${variant}`}>
+      <button type="button" className="pref-btn" onClick={toggleTheme} title={isDark ? t('lightMode') : t('darkMode')} aria-label={isDark ? t('lightMode') : t('darkMode')}>
+        {isDark ? <Sun size={17} /> : <Moon size={17} />}
+        {variant === 'full' && <span>{isDark ? t('lightMode') : t('darkMode')}</span>}
+      </button>
+      <button type="button" className="pref-btn" onClick={toggleLang} title={lang === 'en' ? 'עברית' : 'English'} aria-label={lang === 'en' ? 'עברית' : 'English'}>
+        <Languages size={17} />
+        <span>{lang === 'en' ? 'עב' : 'EN'}</span>
+      </button>
+    </div>
+  );
+}
 
-  const mainNav = [
-    { to: '/', icon: LayoutDashboard, label: t('navHome') },
-    { to: '/shifts', icon: CalendarClock, label: t('navShifts') },
-    { to: '/departments', icon: Building2, label: t('navDepts') },
-    { to: '/workers', icon: Users, label: t('navWorkers') },
-  ];
+function Rail() {
+  const { t } = useLang();
+  return (
+    <aside className="rail">
+      <div className="rail-head"><Brand /></div>
+      <nav className="rail-nav" aria-label={t('appName')}>
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi} className="rail-group">
+            {group.labelKey && <div className="rail-group-label">{t(group.labelKey)}</div>}
+            {group.items.map(({ to, icon: Icon, key }) => (
+              <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `rail-link ${isActive ? 'rail-link-active' : ''}`}>
+                <Icon size={18} />
+                <span>{t(key)}</span>
+              </NavLink>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div className="rail-foot">
+        <NavLink to="/settings" className={({ isActive }) => `rail-link ${isActive ? 'rail-link-active' : ''}`}>
+          <SettingsIcon size={18} />
+          <span>{t('navSettings')}</span>
+        </NavLink>
+        <ThemeLangButtons variant="rail" />
+      </div>
+    </aside>
+  );
+}
 
-  const moreNav = [
-    { to: '/roles', icon: Wrench, label: t('navRoles') },
-    { to: '/planner', icon: CalendarDays, label: t('navPlanner') },
-    { to: '/analytics', icon: BarChart3, label: t('navAnalytics') },
-    { to: '/settings', icon: SettingsIcon, label: t('navSettings') },
-  ];
+function Topbar() {
+  const { t, lang } = useLang();
+  const { pathname } = useLocation();
+  const todayLabel = new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
+  return (
+    <header className="topbar">
+      <div className="topbar-mobile-brand"><Brand /></div>
+      <div className="topbar-date">{todayLabel}</div>
+      <div className="topbar-actions">
+        <SyncPill />
+        <div className="topbar-prefs"><ThemeLangButtons variant="icon" /></div>
+        {pathname !== '/shifts' && (
+          <Link to="/shifts" className="btn btn-primary topbar-cta">
+            <Plus size={16} strokeWidth={2.5} /> {t('newShift')}
+          </Link>
+        )}
+      </div>
+    </header>
+  );
+}
 
-  const allNav = [
-    { to: '/', icon: LayoutDashboard, label: t('navDashboard') },
-    { to: '/roles', icon: Wrench, label: t('navRoles') },
-    { to: '/departments', icon: Building2, label: t('navDepartments') },
-    { to: '/workers', icon: Users, label: t('navWorkers') },
-    { to: '/shifts', icon: CalendarClock, label: t('navShifts') },
-    { to: '/planner', icon: CalendarDays, label: t('navPlanner') },
-    { to: '/analytics', icon: BarChart3, label: t('navAnalytics') },
-    { to: '/settings', icon: SettingsIcon, label: t('navSettings') },
-  ];
+function BottomNav({ moreOpen, setMoreOpen }) {
+  const { t } = useLang();
+  const { pathname } = useLocation();
+  const moreActive = MORE_ITEMS.some((i) => pathname.startsWith(i.to));
+  const tab = (to, Icon, key) => (
+    <NavLink to={to} end={to === '/'} className={({ isActive }) => `tab ${isActive && !moreOpen ? 'tab-active' : ''}`}>
+      <Icon size={21} />
+      <span>{t(key)}</span>
+    </NavLink>
+  );
+  return (
+    <nav className="bottom-nav" aria-label={t('appName')}>
+      {tab('/', Home, 'navToday')}
+      {tab('/planner', CalendarDays, 'navWeek')}
+      <NavLink to="/shifts" className={({ isActive }) => `tab tab-build ${isActive && !moreOpen ? 'tab-active' : ''}`} aria-label={t('navBuild')}>
+        <span className="tab-build-btn"><Plus size={24} strokeWidth={2.5} /></span>
+        <span>{t('navBuildShort')}</span>
+      </NavLink>
+      {tab('/workers', Users, 'navWorkers')}
+      <button type="button" className={`tab ${moreOpen || moreActive ? 'tab-active' : ''}`} onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen}>
+        {moreOpen ? <X size={21} /> : <MoreHorizontal size={21} />}
+        <span>{t('navMore')}</span>
+      </button>
+    </nav>
+  );
+}
 
+function MoreSheet({ onClose }) {
+  const { t } = useLang();
+  return (
+    <>
+      <div className="sheet-backdrop" onClick={onClose} />
+      <div className="sheet" role="dialog" aria-label={t('navMore')}>
+        <div className="sheet-handle" />
+        <div className="sheet-grid">
+          {MORE_ITEMS.map(({ to, icon: Icon, key }) => (
+            <NavLink key={to} to={to} className={({ isActive }) => `sheet-item ${isActive ? 'sheet-item-active' : ''}`} onClick={onClose}>
+              <span className="sheet-item-icon"><Icon size={20} /></span>
+              <span>{t(key)}</span>
+            </NavLink>
+          ))}
+        </div>
+        <ThemeLangButtons variant="full" />
+      </div>
+    </>
+  );
+}
+
+function Shell() {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    setMoreOpen(false);
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return (
+    <div className="app">
+      <Rail />
+      <div className="workspace">
+        <Topbar />
+        <main className="main">
+          <SyncErrorBanner />
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/roles" element={<Roles />} />
+            <Route path="/departments" element={<Departments />} />
+            <Route path="/workers" element={<Workers />} />
+            <Route path="/shifts" element={<Shifts />} />
+            <Route path="/planner" element={<Planner />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
+      </div>
+      <BottomNav moreOpen={moreOpen} setMoreOpen={setMoreOpen} />
+      {moreOpen && <MoreSheet onClose={() => setMoreOpen(false)} />}
+    </div>
+  );
+}
+
+export default function App() {
   return (
     <AppProvider>
       <BrowserRouter>
-        <div className="app">
-          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-
-          <nav className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
-            <div className="sidebar-brand">
-              <CalendarClock size={22} />
-              <span>{t('appName')}</span>
-            </div>
-            <ul className="sidebar-nav">
-              {allNav.map(({ to, icon: Icon, label }) => (
-                <li key={to}>
-                  <NavLink to={to} end={to === '/'} className={({ isActive }) => `sidebar-link ${isActive ? 'sidebar-link-active' : ''}`} onClick={() => setSidebarOpen(false)}>
-                    <Icon size={18} /><span>{label}</span>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-            <div className="sidebar-footer-controls">
-              <button className="lang-toggle" onClick={toggleTheme} title={isDark ? t('lightMode') : t('darkMode')}>
-                {isDark ? <Sun size={14} /> : <Moon size={14} />}
-                {isDark ? t('lightMode') : t('darkMode')}
-              </button>
-              <button className="lang-toggle" onClick={toggle}>
-                <Languages size={14} />
-                {lang === 'en' ? 'עברית' : 'English'}
-              </button>
-            </div>
-          </nav>
-
-          {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-
-          <main className="main">
-            <SyncErrorBanner />
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/roles" element={<Roles />} />
-              <Route path="/departments" element={<Departments />} />
-              <Route path="/workers" element={<Workers />} />
-              <Route path="/shifts" element={<Shifts />} />
-              <Route path="/planner" element={<Planner />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </main>
-
-          <nav className="bottom-bar">
-            {mainNav.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `bottom-tab ${isActive ? 'bottom-tab-active' : ''}`}>
-                <Icon size={20} />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-            <button className={`bottom-tab ${moreOpen ? 'bottom-tab-active' : ''}`} onClick={() => setMoreOpen(!moreOpen)}>
-              <MoreHorizontal size={20} />
-              <span>{t('navMore')}</span>
-            </button>
-          </nav>
-
-          {moreOpen && (
-            <>
-              <div className="more-overlay" onClick={() => setMoreOpen(false)} />
-              <div className="more-menu">
-                {moreNav.map(({ to, icon: Icon, label }) => (
-                  <NavLink key={to} to={to} className={({ isActive }) => `more-item ${isActive ? 'more-item-active' : ''}`} onClick={() => setMoreOpen(false)}>
-                    <Icon size={20} />
-                    <span>{label}</span>
-                  </NavLink>
-                ))}
-                <button className="more-item" onClick={() => { toggleTheme(); setMoreOpen(false); }}>
-                  {isDark ? <Sun size={20} /> : <Moon size={20} />}
-                  <span>{isDark ? t('lightMode') : t('darkMode')}</span>
-                </button>
-                <button className="more-item" onClick={() => { toggle(); setMoreOpen(false); }}>
-                  <Languages size={20} />
-                  <span>{lang === 'en' ? 'עברית' : 'English'}</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <Shell />
       </BrowserRouter>
     </AppProvider>
   );

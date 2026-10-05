@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { Plus, Trash2, GripVertical, ChevronDown, ChevronUp, UserPlus, Tag, X } from 'lucide-react';
+import { Plus, GripVertical, ChevronDown, UserPlus, Tag, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 export default function Departments() {
   const { state, dispatch } = useApp();
@@ -334,8 +335,10 @@ export default function Departments() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>{t('departmentsTitle')}</h1>
-        <p className="subtitle">{t('departmentsSubtitle')}</p>
+        <div>
+          <h1>{t('departmentsTitle')}</h1>
+          <p className="subtitle">{t('departmentsSubtitle')}</p>
+        </div>
       </div>
 
       <form className="add-form" onSubmit={startAdd}>
@@ -361,7 +364,7 @@ export default function Departments() {
 
       {roles.length === 0 && sorted.length > 0 && (
         <div className="alert alert-warning">
-          <span><Link to="/roles" style={{ color: 'inherit', fontWeight: 600 }}>{t('addRolesFirst')}</Link> {t('toConfigureReqs')}</span>
+          <span><Link to="/roles" className="alert-link">{t('addRolesFirst')}</Link> {t('toConfigureReqs')}</span>
         </div>
       )}
 
@@ -396,10 +399,10 @@ export default function Departments() {
                         {hasChildren && <span className="badge badge-parent">{children.length} {t('subDeptsCount')}</span>}
                         <span className="card-meta"> · {getTotalNeeded(dept)} {t('totalNeeded')} · {deptWorkers.length} {t('workersLabel')}</span>
                       </div>
-                      {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      <ChevronDown size={18} className={`chevron ${isExpanded ? 'chevron-open' : ''}`} />
                     </div>
                     <div className="card-actions">
-                      <button className="btn-icon btn-danger" onClick={() => remove(dept.id)}><Trash2 size={15} /></button>
+                      <ConfirmDelete onConfirm={() => remove(dept.id)} label={hasChildren ? t('deleteDeptConfirm') : undefined} />
                     </div>
                   </div>
 
@@ -430,10 +433,10 @@ export default function Departments() {
                                 )}
                                 <span className="card-meta"> · {getTotalNeeded(child)} {t('totalNeeded')} · {childWorkers.length} {t('workersLabel')}</span>
                               </div>
-                              {childExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              <ChevronDown size={16} className={`chevron ${childExpanded ? 'chevron-open' : ''}`} />
                             </div>
                             <div className="card-actions">
-                              <button className="btn-icon btn-danger" onClick={() => dispatch({ type: 'DELETE_DEPARTMENT', payload: child.id })}><Trash2 size={14} /></button>
+                              <ConfirmDelete size={14} onConfirm={() => dispatch({ type: 'DELETE_DEPARTMENT', payload: child.id })} />
                             </div>
                           </div>
                           {childExpanded && renderDeptConfig(child, true)}

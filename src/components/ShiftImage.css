@@ -1,0 +1,230 @@
+/* Shared shift image (exported as PNG via html2canvas and sent to WhatsApp).
+   Deliberately uses fixed colors, independent of the app theme, so the
+   image looks the same no matter who generates it. */
+
+
+.sic-min {
+  width: 440px;
+  background: #ffffff;
+  color: #0a0a0a;
+  padding: 2.5rem 2.25rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sic-min-rtl {
+  font-family: 'Heebo', 'Inter', sans-serif;
+}
+
+/* Header */
+.m-head {
+  margin-bottom: 1.75rem;
+}
+
+.m-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #737373;
+  margin-bottom: 1rem;
+}
+
+.m-kicker-line {
+  width: 24px;
+  height: 1px;
+  background: #d4d4d4;
+}
+
+.m-day {
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: #0a0a0a;
+  margin: 0 0 0.5rem;
+}
+
+.m-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #525252;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-meta-dot {
+  color: #d4d4d4;
+}
+
+/* Rule */
+.m-rule {
+  height: 1px;
+  background: #0a0a0a;
+  margin: 0;
+}
+
+/* Body */
+.m-body {
+  padding: 1.75rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.m-dept {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.m-dept-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 0.5rem;
+}
+
+.m-dept-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: #0a0a0a;
+  margin: 0;
+}
+
+.m-dept-features {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #a3a3a3;
+  font-style: italic;
+}
+
+/* Roles */
+.m-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.m-role {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.sic-min-rtl .m-role {
+  grid-template-columns: 1fr 90px;
+  direction: rtl;
+}
+
+.m-role-name {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #737373;
+  text-align: right;
+  padding-top: 2px;
+}
+
+.sic-min-rtl .m-role-name {
+  text-align: left;
+  order: 2;
+}
+
+.sic-min-rtl .m-role-list {
+  order: 1;
+}
+
+.m-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.m-worker {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #0a0a0a;
+}
+
+.m-worker-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.m-worker-time {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #737373;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.m-gap {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #b45309;
+  font-style: italic;
+}
+
+/* Footer */
+.m-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.m-foot-ok {
+  color: #15803d;
+}
+
+.m-foot-warn {
+  color: #b45309;
+}
+
+.m-foot-right {
+  color: #a3a3a3;
+}
+
+
+@media (max-width: 768px) {
+  .sic-min {
+    width: 100%;
+    max-width: 380px;
+    padding: 1.75rem 1.5rem;
+  }
+
+  .m-day {
+    font-size: 2rem;
+  }
+
+  .m-role {
+    grid-template-columns: 70px 1fr;
+    gap: 0.75rem;
+  }
+
+  .sic-min-rtl .m-role {
+    grid-template-columns: 1fr 70px;
+  }
+}

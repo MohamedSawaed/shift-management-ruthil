@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
+import Avatar from '../components/Avatar';
+import { shiftMeta } from '../lib/shiftTypes';
+import { CalendarDays, Users, CalendarCheck } from 'lucide-react';
 
 export default function Analytics() {
   const { state } = useApp();
@@ -75,36 +78,41 @@ export default function Analytics() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>{t('analyticsTitle')}</h1>
-        <p className="subtitle">{t('analyticsSubtitle')}</p>
+        <div>
+          <h1>{t('analyticsTitle')}</h1>
+          <p className="subtitle">{t('analyticsSubtitle')}</p>
+        </div>
       </div>
 
       {state.shifts.length === 0 ? (
         <div className="empty-state"><p>{t('noShiftsSaved')}</p></div>
       ) : (
         <>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-value">{state.shifts.length}</div>
-              <div className="stat-label">{t('totalShifts')}</div>
+          <section className="stat-strip stat-strip-3">
+            <div className="stat">
+              <span className="stat-icon"><CalendarCheck size={18} /></span>
+              <span className="stat-value">{state.shifts.length}</span>
+              <span className="stat-label">{t('totalShifts')}</span>
             </div>
-            <div className="stat-card">
-              <div className="stat-value">{avgShifts.toFixed(1)}</div>
-              <div className="stat-label">{t('avgShiftsWorker')}</div>
+            <div className="stat">
+              <span className="stat-icon"><Users size={18} /></span>
+              <span className="stat-value">{avgShifts.toFixed(1)}</span>
+              <span className="stat-label">{t('avgShiftsWorker')}</span>
             </div>
-            <div className="stat-card">
-              <div className="stat-value">{new Set(state.shifts.map((s) => s.date)).size}</div>
-              <div className="stat-label">{t('daysCovered')}</div>
+            <div className="stat">
+              <span className="stat-icon"><CalendarDays size={18} /></span>
+              <span className="stat-value">{new Set(state.shifts.map((s) => s.date)).size}</span>
+              <span className="stat-label">{t('daysCovered')}</span>
             </div>
-          </div>
+          </section>
 
-          <div className="section">
+          <section className="panel">
             <h2>{t('workloadBalance')}</h2>
             <p className="subtitle">{t('workloadSubtitle')}</p>
             <div className="bar-chart">
               {workerStats.map((ws) => (
                 <div key={ws.id} className="bar-row">
-                  <span className="bar-label">{ws.name}</span>
+                  <span className="bar-label"><Avatar name={ws.name} size="xs" /> <span className="bar-label-text">{ws.name}</span></span>
                   <div className="bar-track">
                     <div
                       className={`bar-fill ${ws.totalShifts > avgShifts * 1.3 ? 'bar-high' : ws.totalShifts < avgShifts * 0.7 ? 'bar-low' : ''}`}
@@ -115,9 +123,9 @@ export default function Analytics() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="section">
+          <section className="panel">
             <h2>{t('workerBreakdown')}</h2>
             <div className="analytics-table">
               <div className="analytics-header">
@@ -132,20 +140,22 @@ export default function Analytics() {
                 const topDept = Object.entries(ws.byDept).sort((a, b) => b[1] - a[1])[0];
                 return (
                   <div key={ws.id} className="analytics-row">
-                    <span className="analytics-name">{ws.name}</span>
+                    <span className="analytics-name"><Avatar name={ws.name} size="xs" /> {ws.name}</span>
                     <span className="analytics-num">{ws.totalShifts}</span>
                     <span className="analytics-text">{topRole ? getRoleName(topRole[0]) : '—'}</span>
                     <span className="analytics-text">{topDept ? getDeptName(topDept[0]) : '—'}</span>
-                    <span className="analytics-text">
-                      {ws.byShiftType['Morning'] || 0} / {ws.byShiftType['Afternoon'] || 0} / {ws.byShiftType['Night'] || 0}
+                    <span className="analytics-text analytics-mix">
+                      {['Morning', 'Afternoon', 'Night'].map((st) => (
+                        <span key={st} className={`mix-count tone-${shiftMeta(st).tone}`} title={st}>{ws.byShiftType[st] || 0}</span>
+                      ))}
                     </span>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          <div className="section">
+          <section className="panel">
             <h2>{t('deptFillRates')}</h2>
             <div className="bar-chart">
               {deptStats.map((ds) => (
@@ -161,7 +171,7 @@ export default function Analytics() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         </>
       )}
     </div>

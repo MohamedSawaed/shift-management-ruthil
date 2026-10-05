@@ -1,6 +1,7 @@
 import React, { useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useLang } from '../i18n/LangContext';
+import './ShiftImage.css';
 
 export default function ShiftImage({ shift, roles, departments, workers, getDeptLabel, shiftTimes, onClose }) {
   const { t, lang } = useLang();

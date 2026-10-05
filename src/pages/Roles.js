@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { Plus, GripVertical } from 'lucide-react';
+import ConfirmDelete from '../components/ConfirmDelete';
 
 export default function Roles() {
   const { state, dispatch } = useApp();
@@ -36,8 +37,10 @@ export default function Roles() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1>{t('rolesTitle')}</h1>
-        <p className="subtitle">{t('rolesSubtitle')}</p>
+        <div>
+          <h1>{t('rolesTitle')}</h1>
+          <p className="subtitle">{t('rolesSubtitle')}</p>
+        </div>
       </div>
 
       <form className="add-form" onSubmit={add}>
@@ -67,7 +70,7 @@ export default function Roles() {
                 </span>
               </div>
               <div className="card-actions">
-                <button className="btn-icon btn-danger" onClick={() => remove(role.id)}><Trash2 size={15} /></button>
+                <ConfirmDelete onConfirm={() => remove(role.id)} />
               </div>
             </div>
           ))}
