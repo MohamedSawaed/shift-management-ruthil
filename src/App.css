@@ -2774,46 +2774,6 @@ select.input {
   white-space: nowrap;
 }
 
-/* ─── Pay & tax panel ─── */
-
-.pay-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.6rem 0.75rem;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  border-radius: 0 0 var(--radius) var(--radius);
-}
-
-.pay-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.5rem;
-}
-
-.pay-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.pay-summary {
-  opacity: 0.75;
-}
-
-.pay-net-preview {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.pay-net-preview strong {
-  color: var(--text);
-}
-
 /* ─── Drag & Drop in shifts ─── */
 
 .result-toolbar {
@@ -3679,11 +3639,6 @@ select.input {
 
   .avail-label {
     width: 100%;
-  }
-
-  /* Pay panel */
-  .pay-fields {
-    grid-template-columns: 1fr;
   }
 
   /* Feature add */
