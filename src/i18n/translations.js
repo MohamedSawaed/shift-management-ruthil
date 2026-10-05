@@ -15,6 +15,8 @@ export const translations = {
     navAnalytics: 'Analytics',
     navSettings: 'Settings',
     navMore: 'More',
+    lightMode: 'Light',
+    darkMode: 'Dark',
 
     // Settings
     settingsTitle: 'Settings',
@@ -237,6 +239,8 @@ export const translations = {
     navAnalytics: 'נתונים',
     navSettings: 'הגדרות',
     navMore: 'עוד',
+    lightMode: 'בהיר',
+    darkMode: 'כהה',
 
     // Settings
     settingsTitle: 'הגדרות',

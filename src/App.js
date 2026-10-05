@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Link } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { useLang } from './i18n/LangContext';
@@ -10,8 +10,46 @@ import Shifts from './pages/Shifts';
 import Planner from './pages/Planner';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
-import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Wrench, Building2, Users, CalendarClock, CalendarDays, BarChart3, Menu, X, MoreHorizontal, Languages, Settings as SettingsIcon, AlertTriangle, Sun, Moon } from 'lucide-react';
 import './App.css';
+
+const THEME_KEY = 'myshift_theme';
+
+// Defaults to following the OS/browser color scheme (no explicit choice
+// saved yet), and keeps tracking it live if the person never overrides it.
+// Toggling saves an explicit preference that wins from then on.
+function useTheme() {
+  const [explicit, setExplicit] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY); } catch { return null; }
+  });
+  const [systemDark, setSystemDark] = useState(() => {
+    try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch { return false; }
+  });
+
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia('(prefers-color-scheme: dark)'); } catch { return; }
+    const handler = (e) => setSystemDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const isDark = explicit ? explicit === 'dark' : systemDark;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (explicit) root.setAttribute('data-theme', explicit);
+    else root.removeAttribute('data-theme');
+    try {
+      if (explicit) localStorage.setItem(THEME_KEY, explicit);
+      else localStorage.removeItem(THEME_KEY);
+    } catch { /* ignore */ }
+  }, [explicit]);
+
+  const toggle = useCallback(() => setExplicit(isDark ? 'light' : 'dark'), [isDark]);
+
+  return { isDark, toggle };
+}
 
 // Cloud sync failing (e.g. a paused Supabase project) used to be visible only
 // as a small status dot on the Settings page — easy to miss entirely. Surface
@@ -34,6 +72,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const { t, lang, toggle } = useLang();
+  const { isDark, toggle: toggleTheme } = useTheme();
 
   const mainNav = [
     { to: '/', icon: LayoutDashboard, label: t('navHome') },
@@ -82,7 +121,11 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <div style={{ padding: '0.75rem 1rem', marginTop: 'auto' }}>
+            <div className="sidebar-footer-controls">
+              <button className="lang-toggle" onClick={toggleTheme} title={isDark ? t('lightMode') : t('darkMode')}>
+                {isDark ? <Sun size={14} /> : <Moon size={14} />}
+                {isDark ? t('lightMode') : t('darkMode')}
+              </button>
               <button className="lang-toggle" onClick={toggle}>
                 <Languages size={14} />
                 {lang === 'en' ? 'עברית' : 'English'}
@@ -129,6 +172,10 @@ export default function App() {
                     <span>{label}</span>
                   </NavLink>
                 ))}
+                <button className="more-item" onClick={() => { toggleTheme(); setMoreOpen(false); }}>
+                  {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                  <span>{isDark ? t('lightMode') : t('darkMode')}</span>
+                </button>
                 <button className="more-item" onClick={() => { toggle(); setMoreOpen(false); }}>
                   <Languages size={20} />
                   <span>{lang === 'en' ? 'עברית' : 'English'}</span>
