@@ -8,7 +8,7 @@ import Avatar from '../components/Avatar';
 import { workerName as nameOf } from '../lib/workers';
 import ShiftDrawer from '../components/ShiftDrawer';
 import ShiftImage from '../components/ShiftImage';
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Circle, Plus, ArrowRight, CheckCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Circle, Plus, ArrowRight, CheckCheck, Share2 } from 'lucide-react';
 
 // Monday of the week containing `d`, at local midnight.
 function mondayOf(d) {
@@ -51,6 +51,7 @@ export default function Schedule() {
   const [weekOffset, setWeekOffset] = useState(() => (location.state && location.state.date ? weekOffsetFor(location.state.date) : 0));
   const [openShiftId, setOpenShiftId] = useState(null);
   const [shareShift, setShareShift] = useState(null);
+  const [shareDate, setShareDate] = useState(null); // share all of a day's shifts in one image
   const [toast, setToast] = useState(() => (location.state && location.state.toast) || null);
 
   // Show the "saved" toast once, then drop it from history so a refresh doesn't repeat it.
@@ -234,6 +235,11 @@ export default function Schedule() {
               <div key={d} className={`board-day ${d === today ? 'is-today' : ''} ${d < today ? 'is-past' : ''}`}>
                 <span className="board-day-name">{fmt(d, { weekday: 'short' })}</span>
                 <span className="board-day-num">{fmt(d, { day: 'numeric' })}</span>
+                {(byDate[d] || []).length > 0 && (
+                  <button type="button" className="day-share" onClick={() => setShareDate(d)} title={t('shareDay')} aria-label={`${t('shareDay')} — ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}`}>
+                    <Share2 size={13} /> {t('shareDayShort')}
+                  </button>
+                )}
               </div>
             ))}
             {SHIFT_TYPES.map((st) => {
@@ -267,6 +273,11 @@ export default function Schedule() {
                 <span className="day-card-name">{fmt(d, { weekday: 'long' })}</span>
                 <span className="day-card-date">{fmt(d, { day: 'numeric', month: 'short' })}</span>
                 {d === today && <span className="badge badge-primary">{t('today')}</span>}
+                {(byDate[d] || []).length > 0 && (
+                  <button type="button" className="day-share" onClick={() => setShareDate(d)} aria-label={`${t('shareDay')} — ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}`}>
+                    <Share2 size={13} /> {t('shareDayShort')}
+                  </button>
+                )}
               </header>
               {SHIFT_TYPES.filter((st) => st !== 'Friday' || isFriday(d) || shiftFor(d, st)).map((st) => {
                 const meta = shiftMeta(st);
@@ -302,6 +313,16 @@ export default function Schedule() {
           getDeptLabel={(d) => deptLabel(d, state.departments)}
           shiftTimes={state.shiftTimes}
           onClose={() => setShareShift(null)}
+        />
+      )}
+
+      {shareDate && (byDate[shareDate] || []).length > 0 && (
+        <ShiftImage
+          dayShifts={byDate[shareDate]}
+          departments={state.departments}
+          workers={state.workers}
+          getDeptLabel={(d) => deptLabel(d, state.departments)}
+          onClose={() => setShareDate(null)}
         />
       )}
 

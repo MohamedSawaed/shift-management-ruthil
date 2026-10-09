@@ -2011,6 +2011,29 @@ html[dir="rtl"] .today-strip-label {
   font-variant-numeric: tabular-nums;
 }
 
+.day-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin-top: 4px;
+  padding-inline: 9px;
+  border-radius: var(--r-full);
+  border: 1px solid color-mix(in srgb, var(--whatsapp) 40%, transparent);
+  background: transparent;
+  color: var(--whatsapp);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+
+.day-share:hover {
+  background: var(--whatsapp);
+  color: #fff;
+}
+
 .board-day.is-past .board-day-num {
   color: var(--text-3);
 }
@@ -4424,6 +4447,19 @@ html[dir="rtl"] .dept-section-title {
   }
 
   .day-card-head .badge {
+    margin-inline-start: auto;
+  }
+
+  .day-card-head .day-share {
+    margin-top: 0;
+    align-self: center;
+  }
+
+  .day-card-head .badge + .day-share {
+    margin-inline-start: 6px;
+  }
+
+  .day-card-head .day-card-date + .day-share {
     margin-inline-start: auto;
   }
 

@@ -314,6 +314,9 @@ export const translations = {
 
     // Share image
     shareShift: 'Share shift',
+    shareDay: 'Share the day’s shifts',
+    shareDayShort: 'Share day',
+    dayScheduleShort: 'Day schedule',
     shareHintMobile: 'Tap “Send to WhatsApp” and pick the chat — the image is sent as a picture.',
     shareHintDesktop: '“Send to WhatsApp” copies the image and opens WhatsApp Web — choose a chat and paste (Ctrl+V).',
     pasteInWhatsApp: 'Image copied. In WhatsApp, open the chat and press Ctrl+V to send it.',
@@ -645,6 +648,9 @@ export const translations = {
 
     // Share image
     shareShift: 'שיתוף משמרת',
+    shareDay: 'שיתוף משמרות היום',
+    shareDayShort: 'שתף יום',
+    dayScheduleShort: 'סידור יום',
     shareHintMobile: 'הקש על "שלח לוואטסאפ" ובחר צ׳אט — התמונה נשלחת כתמונה.',
     shareHintDesktop: '"שלח לוואטסאפ" מעתיק את התמונה ופותח את וואטסאפ ווב — בחר צ׳אט והדבק (Ctrl+V).',
     pasteInWhatsApp: 'התמונה הועתקה. בוואטסאפ, פתח את הצ׳אט ולחץ Ctrl+V כדי לשלוח.',

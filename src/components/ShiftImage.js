@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLang } from '../i18n/LangContext';
-import { shiftMeta, shiftLabel as labelForShift } from '../lib/shiftTypes';
-import { renderShiftImage } from '../lib/shiftImageCanvas';
+import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift } from '../lib/shiftTypes';
+import { renderShareImage } from '../lib/shiftImageCanvas';
 import { X, Share2, Copy, Download, Loader2, MoreHorizontal } from 'lucide-react';
 import './ShiftImage.css';
 
@@ -13,19 +13,25 @@ const IS_MOBILE = typeof navigator !== 'undefined' && (
   || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))
 );
 
-export default function ShiftImage({ shift, departments, workers, getDeptLabel, onClose }) {
+// Shares one shift (`shift`), or every shift of a day in one picture
+// (`dayShifts` — all on the same date).
+export default function ShiftImage({ shift, dayShifts, departments, workers, getDeptLabel, onClose }) {
   const { t, lang } = useLang();
   const rtl = lang === 'he';
   const [image, setImage] = useState(null); // { blob, url, file }
   const [failed, setFailed] = useState(false);
   const [notice, setNotice] = useState(null);
 
-  const meta = shiftMeta(shift.name);
-  const label = labelForShift(t, shift.name);
-  const dateObj = new Date(`${shift.date}T00:00:00`);
+  const isDay = !shift && Array.isArray(dayShifts) && dayShifts.length > 0;
+  const shifts = isDay
+    ? [...dayShifts].sort((a, b) => SHIFT_TYPES.indexOf(a.name) - SHIFT_TYPES.indexOf(b.name))
+    : [shift];
+  const date = shifts[0].date;
+  const dateObj = new Date(`${date}T00:00:00`);
   const dayName = new Intl.DateTimeFormat(rtl ? 'he-IL' : 'en-GB', { weekday: 'long' }).format(dateObj);
-  const dateShort = shift.date.split('-').reverse().join('/');
-  const fileName = `shift-${shift.date}-${shift.name}.png`;
+  const dateShort = date.split('-').reverse().join('/');
+  const label = isDay ? dayName : labelForShift(t, shift.name);
+  const fileName = isDay ? `shifts-${date}.png` : `shift-${date}-${shift.name}.png`;
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -43,12 +49,13 @@ export default function ShiftImage({ shift, departments, workers, getDeptLabel, 
   useEffect(() => {
     let cancelled = false;
     let url = null;
-    renderShiftImage({
-      shift, departments, workers, getDeptLabel, rtl,
-      label,
-      kicker: t('shiftScheduleShort'),
-      dateLine: `${dayName} · ${dateShort}`,
-      tone: meta.tone,
+    renderShareImage({
+      departments, workers, getDeptLabel, rtl,
+      sections: shifts.map((sh) => ({ shift: sh, label: labelForShift(t, sh.name), tone: shiftMeta(sh.name).tone })),
+      title: label,
+      kicker: isDay ? t('dayScheduleShort') : t('shiftScheduleShort'),
+      dateLine: isDay ? dateShort : `${dayName} · ${dateShort}`,
+      heroTone: isDay ? 'day' : shiftMeta(shift.name).tone,
     }).then((blob) => {
       if (cancelled || !blob) return;
       url = URL.createObjectURL(blob);
@@ -61,7 +68,7 @@ export default function ShiftImage({ shift, departments, workers, getDeptLabel, 
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [shift, departments, workers, rtl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shift, dayShifts, departments, workers, rtl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -126,7 +133,7 @@ export default function ShiftImage({ shift, departments, workers, getDeptLabel, 
       <div className="si-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t('shareShift')}>
         <header className="si-modal-head">
           <div>
-            <h2>{t('shareShift')}</h2>
+            <h2>{isDay ? t('shareDay') : t('shareShift')}</h2>
             <p>{IS_MOBILE ? t('shareHintMobile') : t('shareHintDesktop')}</p>
           </div>
           <button type="button" className="btn-icon" onClick={onClose} aria-label={t('close')}><X size={18} /></button>

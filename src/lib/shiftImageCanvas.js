@@ -12,6 +12,7 @@ const TONES = {
   afternoon: { accent: '#ff8a65', hero: ['#ff9a5a', '#f5503b', '#d6336c'] },
   night: { accent: '#91a7ff', hero: ['#6f8bff', '#4c5ef0', '#3a1fa8'] },
   friday: { accent: '#ff8cc6', hero: ['#ff8cc6', '#e64980', '#9c36b5'] },
+  day: { accent: '#a99dff', hero: ['#9d8cff', '#5b4ff5', '#3a2fb0'] },
 };
 
 // Shift icons as vector paths (lucide, 24×24 grid) — drawn, not emoji, so they
@@ -20,6 +21,7 @@ const ICONS = {
   morning: ['M12 2v8', 'm4.93 10.93 1.41 1.41', 'M2 18h2', 'M20 18h2', 'm19.07 10.93-1.41 1.41', 'M22 22H2', 'm8 6 4-4 4 4', 'M16 18a4 4 0 0 0-8 0'],
   afternoon: ['M12 10V2', 'm4.93 10.93 1.41 1.41', 'M2 18h2', 'M20 18h2', 'm19.07 10.93-1.41 1.41', 'M22 22H2', 'm16 6-4 4-4-4', 'M16 18a4 4 0 0 0-8 0'],
   night: ['M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'],
+  day: ['M8 2v4', 'M16 2v4', 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M3 10h18', 'M8 14h.01', 'M12 14h.01', 'M16 14h.01', 'M8 18h.01', 'M12 18h.01', 'M16 18h.01'],
   friday: ['M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z'],
 };
 
@@ -77,17 +79,8 @@ async function loadFonts(families) {
   await Promise.all(specs.map((s) => document.fonts.load(s).catch(() => null)));
 }
 
-/**
- * @returns {Promise<Blob>} PNG of the shift.
- */
-export async function renderShiftImage({ shift, departments, workers, getDeptLabel, label, kicker, dateLine, tone, rtl }) {
-  const pal = TONES[tone] || TONES.morning;
-  const head = rtl ? '"Heebo", "Plus Jakarta Sans", sans-serif' : '"Plus Jakarta Sans", "Heebo", sans-serif';
-  const body = rtl ? '"Heebo", "Inter", sans-serif' : '"Inter", "Heebo", sans-serif';
-  await loadFonts(['Heebo', 'Plus Jakarta Sans', 'Inter']);
-
-  // ── Data: departments with people, in configured order ──
-  const depts = Object.keys(shift.assignments || {})
+function deptsOf(shift, departments, workers, getDeptLabel) {
+  return Object.keys(shift.assignments || {})
     .map((deptId) => {
       const ids = [...new Set(Object.values(shift.assignments[deptId] || {}).flat())];
       const d = departments.find((x) => x.id === deptId);
@@ -99,6 +92,24 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
     })
     .filter((d) => d.names.length > 0)
     .sort((a, b) => a.priority - b.priority);
+}
+
+/**
+ * Draws the share image: a hero card (title + date), then one or more
+ * sections — each a shift (with its own colored heading when there are
+ * several) and its department cards.
+ * @returns {Promise<Blob>} PNG
+ */
+export async function renderShareImage({ sections, departments, workers, getDeptLabel, title, kicker, dateLine, heroTone, rtl }) {
+  const pal = TONES[heroTone] || TONES.morning;
+  const head = rtl ? '"Heebo", "Plus Jakarta Sans", sans-serif' : '"Plus Jakarta Sans", "Heebo", sans-serif';
+  const body = rtl ? '"Heebo", "Inter", sans-serif' : '"Inter", "Heebo", sans-serif';
+  await loadFonts(['Heebo', 'Plus Jakarta Sans', 'Inter']);
+
+  const withHeads = sections.length > 1;
+  const secs = sections
+    .map((sec) => ({ ...sec, pal: TONES[sec.tone] || TONES.morning, depts: deptsOf(sec.shift, departments, workers, getDeptLabel) }))
+    .filter((sec) => sec.depts.length > 0);
 
   // ── Layout ──
   const CARD_X = 48;
@@ -110,20 +121,24 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
   const ROW_GAP = 16;
   const CELL_W = (CARD_W - CARD_PAD * 2 - COL_GAP * (COLS - 1)) / COLS;
   const DEPT_HEAD = 64;
+  const CARD_GAP = 24;
+  const SEC_HEAD = 104; // height of a shift heading in multi-shift images
+  const SEC_GAP = 40;
 
-  // Hero card in the shift's color
   const HERO_X = 32;
   const HERO_Y = 32;
   const HERO_W = W - HERO_X * 2;
   const HERO_PAD = 56;
   const HERO_H = HERO_PAD + 76 + 44 + 140 + 26 + 10 + 40 + 46 + HERO_PAD;
   const headerH = HERO_Y + HERO_H + 40;
-  const cardHeights = depts.map((d) => {
+
+  const cardH = (d) => {
     const rows = Math.ceil(d.names.length / COLS);
     return CARD_PAD + DEPT_HEAD + 28 + rows * ROW_H + (rows - 1) * ROW_GAP + CARD_PAD;
-  });
-  const CARD_GAP = 24;
-  const H = headerH + cardHeights.reduce((s2, h) => s2 + h, 0) + CARD_GAP * Math.max(0, depts.length - 1) + 48;
+  };
+  const secH = (sec) => (withHeads ? SEC_HEAD : 0)
+    + sec.depts.reduce((n, d) => n + cardH(d), 0) + CARD_GAP * Math.max(0, sec.depts.length - 1);
+  const H = headerH + secs.reduce((n, sec) => n + secH(sec), 0) + SEC_GAP * Math.max(0, secs.length - 1) + 48;
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -151,7 +166,6 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
   ctx.fillStyle = hg;
   ctx.fill();
   ctx.clip();
-  // Decorative rings
   ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
   ctx.arc(X(HERO_X + HERO_W - 60), HERO_Y + 40, 260, 0, Math.PI * 2);
@@ -170,7 +184,6 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
   const hx = HERO_X + HERO_PAD;
   let y = HERO_Y + HERO_PAD;
 
-  // Kicker pill: icon + "Shift schedule"
   ctx.font = `700 30px ${head}`;
   const kickerW = ctx.measureText(kicker).width;
   const pillW = 24 + 40 + 16 + kickerW + 32;
@@ -180,7 +193,7 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
   ctx.strokeStyle = 'rgba(255,255,255,0.32)';
   ctx.lineWidth = 2;
   ctx.stroke();
-  drawIcon(ctx, tone, X(hx + 24, 40), y + 18, 40, '#ffffff');
+  drawIcon(ctx, heroTone, X(hx + 24, 40), y + 18, 40, '#ffffff');
   ctx.font = `700 30px ${head}`;
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
@@ -188,17 +201,16 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
   ctx.fillText(kicker, X(hx + 24 + 40 + 16), y + 40);
 
   y += 76 + 44;
-  // Shift name
   ctx.textBaseline = 'alphabetic';
   let titleSize = 140;
   ctx.font = `800 ${titleSize}px ${head}`;
-  while (ctx.measureText(label).width > HERO_W - HERO_PAD * 2 && titleSize > 72) {
+  while (ctx.measureText(title).width > HERO_W - HERO_PAD * 2 && titleSize > 72) {
     titleSize -= 6;
     ctx.font = `800 ${titleSize}px ${head}`;
   }
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = align('left');
-  ctx.fillText(label, X(hx - 4), y + 116);
+  ctx.fillText(title, X(hx - 4), y + 116);
 
   y += 140 + 26;
   roundRect(ctx, X(hx, 110), y, 110, 10, 5);
@@ -213,10 +225,8 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
 
   y = headerH;
 
-  // ── Departments ──
-  depts.forEach((d, i) => {
-    const h = cardHeights[i];
-    // Card
+  const drawDept = (d, accent) => {
+    const h = cardH(d);
     roundRect(ctx, CARD_X, y, CARD_W, h, 44);
     const cg = ctx.createLinearGradient(0, y, 0, y + h);
     cg.addColorStop(0, 'rgba(255,255,255,0.085)');
@@ -227,10 +237,9 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Accent bar + department name + headcount
     const innerX = CARD_X + CARD_PAD;
     roundRect(ctx, X(innerX, 10), y + CARD_PAD + 6, 10, DEPT_HEAD - 12, 5);
-    ctx.fillStyle = pal.accent;
+    ctx.fillStyle = accent;
     ctx.fill();
 
     const countText = String(d.names.length);
@@ -246,13 +255,11 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
     ctx.fillText(countText, X(badgeX + badgeW / 2), y + CARD_PAD + 33);
 
     ctx.textAlign = align('left');
-    ctx.textBaseline = 'middle';
     ctx.font = `800 52px ${head}`;
     ctx.fillStyle = '#ffffff';
     const nameMax = CARD_W - CARD_PAD * 2 - 34 - badgeW - 20;
     ctx.fillText(ellipsize(ctx, d.name, nameMax), X(innerX + 34), y + CARD_PAD + DEPT_HEAD / 2 + 2);
 
-    // People: two-column list of avatar + name
     const top = y + CARD_PAD + DEPT_HEAD + 28;
     d.names.forEach((n, k) => {
       const col = k % COLS;
@@ -281,8 +288,39 @@ export async function renderShiftImage({ shift, departments, workers, getDeptLab
       ctx.fillText(ellipsize(ctx, n, CELL_W - (textX - cx) - 18), X(textX), cy + ROW_H / 2 + 2);
     });
 
-    y += h + CARD_GAP;
+    y += h;
+  };
+
+  secs.forEach((sec, si) => {
+    if (si > 0) y += SEC_GAP;
+    if (withHeads) {
+      // Shift heading: a pill in the shift's colors with its icon and name.
+      ctx.font = `800 44px ${head}`;
+      const tw = ctx.measureText(sec.label).width;
+      const pw = 28 + 44 + 18 + tw + 40;
+      roundRect(ctx, X(CARD_X, pw), y + 8, pw, 76, 38);
+      const sg = ctx.createLinearGradient(CARD_X, y, CARD_X + pw, y + 76);
+      sg.addColorStop(0, sec.pal.hero[0]);
+      sg.addColorStop(1, sec.pal.hero[1]);
+      ctx.fillStyle = sg;
+      ctx.fill();
+      drawIcon(ctx, sec.tone, X(CARD_X + 28, 44), y + 24, 44, '#ffffff');
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = align('left');
+      ctx.textBaseline = 'middle';
+      ctx.fillText(sec.label, X(CARD_X + 28 + 44 + 18), y + 48);
+      y += SEC_HEAD;
+    }
+    sec.depts.forEach((d, di) => {
+      if (di > 0) y += CARD_GAP;
+      drawDept(d, sec.pal.accent);
+    });
   });
 
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+}
+
+/** One shift. */
+export function renderShiftImage({ shift, label, tone, ...rest }) {
+  return renderShareImage({ ...rest, title: label, heroTone: tone, sections: [{ shift, label, tone }] });
 }
