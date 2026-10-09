@@ -1,16 +1,17 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useApp, autoAssign, isWorkerAvailable } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, countAssigned, localDateISO } from '../lib/shiftTypes';
+import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO } from '../lib/shiftTypes';
 import Avatar from '../components/Avatar';
-import { Zap, Save, Trash2, AlertTriangle, ChevronDown, Undo2, Pencil, Image, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Zap, Save, AlertTriangle, Undo2, Pencil, Image, Sparkles, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
 import ShiftImage from '../components/ShiftImage';
 
 export default function Shifts() {
   const { state, dispatch } = useApp();
   const { t, lang } = useLang();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const shiftLabel = (s) => labelForShift(t, s);
   // Today's "Build" buttons open the builder pre-filled with ?date=…&shift=…
   const [date, setDate] = useState(() => {
@@ -27,8 +28,9 @@ export default function Shifts() {
   const [history, setHistory] = useState([]);
   const [deptNameOverrides, setDeptNameOverrides] = useState({});  // { deptId: "custom name" }
   const [editingDeptName, setEditingDeptName] = useState(null);
-  const [expandedShift, setExpandedShift] = useState(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  // Wizard: 1 When → 2 Departments → 3 Workers → 4 Review
+  const [step, setStep] = useState(1);
+  const [autoPicked, setAutoPicked] = useState(false);
   const [dragWorker, setDragWorker] = useState(null);
   const [shareShift, setShareShift] = useState(null);
   const [selectedSwapWorker, setSelectedSwapWorker] = useState(null);
@@ -526,121 +528,152 @@ export default function Shifts() {
     } else {
       dispatch({ type: 'ADD_SHIFT', payload: { date, name: shiftName, assignments: result.assignments, gaps: result.gaps, deptNames: deptNameOverrides, workerTimes: workerTimeOverrides } });
     }
-    setResult(null);
-    setSelectedWorkers([]);
-    setHistory([]);
-    setDeptNameOverrides({});
-    setWorkerTimeOverrides({});
+    // Back to the schedule, which confirms the save and jumps to that week.
+    navigate('/', { state: { toast: existingShiftForSlot ? 'updated' : 'saved', date } });
   };
 
-  const deleteShift = (id) => dispatch({ type: 'DELETE_SHIFT', payload: id });
   const getWorkerName = (id) => state.workers.find((w) => w.id === id)?.name || '?';
-  const getDeptName = (id) => state.departments.find((d) => d.id === id)?.name || '?';
-
-  const formatShiftForWhatsApp = (shift) => {
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const d = new Date(shift.date + 'T00:00:00');
-    const dayName = dayNames[d.getDay()];
-    const dateStr = `${shift.date.split('-').reverse().join('/')}`;
-
-    let msg = '';
-    msg += `\u2728 *SHIFT SCHEDULE* \u2728\n`;
-    msg += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
-    msg += `\uD83D\uDCC5 *${dayName}, ${dateStr}*\n`;
-    msg += `\u23F0 *${shift.name} Shift*\n`;
-    msg += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n`;
-
-    const sg = shift.gaps || {};
-    const deptIds = Object.keys(shift.assignments || {});
-
-    for (const deptId of deptIds) {
-      const da = shift.assignments[deptId] || {};
-      const deptGaps = sg[deptId] || {};
-      const hasWorkers = Object.values(da).some((arr) => Array.isArray(arr) && arr.length > 0);
-      const hasGaps = Object.keys(deptGaps).length > 0;
-      if (!hasWorkers && !hasGaps) continue;
-
-      const deptDisplayName = (shift.deptNames && shift.deptNames[deptId]) || getDeptLabel(state.departments.find((dd) => dd.id === deptId) || { name: getDeptName(deptId) });
-      const deptObj = state.departments.find((dd) => dd.id === deptId);
-      const features = (deptObj && deptObj.features) || [];
-
-      msg += `\uD83C\uDFED *${deptDisplayName}*`;
-      if (features.length > 0) msg += ` _${features.join(' \u00B7 ')}_`;
-      msg += `\n`;
-
-      for (const role of roles) {
-        const assigned = da[role.id] || [];
-        const gap = deptGaps[role.id] || 0;
-        if (assigned.length === 0 && gap === 0) continue;
-
-        const names = assigned.map((wid) => getWorkerName(wid));
-        msg += `   \u25B8 *${role.name}:* ${names.join(', ')}`;
-        if (gap > 0) msg += ` \u26A0\uFE0F _+${gap} needed_`;
-        msg += `\n`;
-      }
-      msg += `\n`;
-    }
-
-    const totalGapsCount = Object.values(sg).reduce(
-      (sum, rg) => sum + (typeof rg === 'object' ? Object.values(rg).reduce((s, n) => s + n, 0) : 0), 0
-    );
-
-    if (totalGapsCount > 0) {
-      msg += `\u26A0\uFE0F *${totalGapsCount} position${totalGapsCount !== 1 ? 's' : ''} still open*\n`;
-    } else {
-      msg += `\u2705 *All positions filled!*\n`;
-    }
-
-    msg += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
-    msg += `_Sent from MyShift_`;
-
-    return msg;
-  };
-
-
-  const copyShiftText = (shift) => {
-    const msg = formatShiftForWhatsApp(shift);
-    navigator.clipboard.writeText(msg).then(() => {
-      alert(t('copiedToClipboard'));
-    });
-  };
-
-  const existingShifts = [...state.shifts].sort((a, b) => new Date(b.date) - new Date(a.date) || b.createdAt - a.createdAt);
-  const totalGaps = result ? Object.values(result.gaps).reduce((sum, rg) => sum + (typeof rg === 'object' ? Object.values(rg).reduce((s, n) => s + n, 0) : 0), 0) : 0;
+  const totalGaps = result ? countGaps(result.gaps) : 0;
   const ready = allDepts.length > 0 && state.workers.length > 0;
 
   const fmtDate = (iso) => new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${iso}T00:00:00`));
   const hours = (state.shiftTimes || {})[shiftName] || {};
+  const meta = shiftMeta(shiftName);
+  const ShiftIcon = meta.icon;
+
+  // Edit mode (?edit=1 from the schedule): open the existing shift straight at
+  // Review, with its departments, workers, custom names and times loaded.
+  const preloaded = useRef(false);
+  useEffect(() => {
+    if (preloaded.current) return;
+    preloaded.current = true;
+    if (searchParams.get('edit') !== '1' || !existingShiftForSlot) return;
+    const sh = existingShiftForSlot;
+    const leafIds = new Set(allDepts.map((d) => d.id));
+    const deptIds = [...new Set([...Object.keys(sh.assignments || {}), ...Object.keys(sh.gaps || {})])].filter((id) => leafIds.has(id));
+    const workerIds = new Set();
+    for (const dId of Object.keys(sh.assignments || {})) {
+      for (const rId of Object.keys(sh.assignments[dId] || {})) {
+        for (const wid of sh.assignments[dId][rId] || []) {
+          if (state.workers.some((w) => w.id === wid)) workerIds.add(wid);
+        }
+      }
+    }
+    setSelectedDepts(deptIds);
+    setSelectedWorkers([...workerIds]);
+    setResult({ assignments: JSON.parse(JSON.stringify(sh.assignments || {})), gaps: JSON.parse(JSON.stringify(sh.gaps || {})), unassigned: [] });
+    setDeptNameOverrides(sh.deptNames || {});
+    setWorkerTimeOverrides(sh.workerTimes || {});
+    setStep(4);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Arriving at the Workers step with nobody chosen yet: pre-pick the smallest
+  // team that covers every position, so the common case is just "Next".
+  useEffect(() => {
+    if (step === 3 && selectedWorkers.length === 0 && workerAnalysis.totalSlots > 0) {
+      smartSelect();
+      setAutoPicked(true);
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const STEPS = [
+    { n: 1, label: t('stepWhen') },
+    { n: 2, label: t('step1Depts') },
+    { n: 3, label: t('step2Workers') },
+    { n: 4, label: t('stepReview') },
+  ];
+  const reachable = (n) => n <= 2 || (n === 3 && selectedDepts.length > 0) || (n === 4 && !!result);
+  const canNext = step === 1 ? true
+    : step === 2 ? selectedDepts.length > 0
+      : step === 3 ? selectedWorkers.length > 0
+        : !!result;
+
+  const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  const goTo = (n) => { setStep(n); scrollTop(); };
+  const goNext = () => {
+    if (!canNext) return;
+    if (step === 3) {
+      if (!result) generate();
+      goTo(4);
+    } else if (step === 4) {
+      save();
+    } else {
+      goTo(step + 1);
+    }
+  };
+  const goBack = () => (step === 1 ? navigate('/') : goTo(step - 1));
+
+  const barInfo = () => {
+    if (step === 1) return hours.start && hours.end ? `${shiftLabel(shiftName)} · ${hours.start}–${hours.end}` : shiftLabel(shiftName);
+    if (step === 2) return t('deptsSelected', { n: selectedDepts.length });
+    if (step === 3) {
+      const cov = workerAnalysis.totalSlots > 0 && selectedWorkers.length > 0 ? ` · ${workerAnalysis.coverage}%` : '';
+      return `${t('summaryCounts', { depts: selectedDepts.length, workers: selectedWorkers.length })}${cov}`;
+    }
+    return totalGaps > 0 ? t('openCount', { n: totalGaps }) : t('allFilledShort');
+  };
+
+  const renderDeptButton = (d) => {
+    const active = selectedDepts.includes(d.id);
+    const feats = getDeptFeatures(d);
+    return (
+      <button key={d.id} type="button" aria-pressed={active} className={`dept-pick ${active ? 'dept-pick-active' : ''}`} onClick={() => toggleDept(d.id)}>
+        <span className="dept-pick-name">
+          {d.name}
+          {feats.length > 0 && <span className="dept-pick-features">{feats.join(' · ')}</span>}
+        </span>
+        <span className="dept-pick-info">{getDeptInfo(d)}</span>
+      </button>
+    );
+  };
 
   return (
-    <div className="page page-with-actionbar">
-      <div className="page-header">
-        <div>
-          <h1>{t('shiftsTitle')}</h1>
-          <p className="subtitle">{t('shiftsSubtitle')}</p>
+    <div className="page wizard">
+      <div className="wizard-top">
+        <div className={`wizard-context tone-${meta.tone}`}>
+          <span className="tone-icon"><ShiftIcon size={18} /></span>
+          <div className="wizard-context-text">
+            <span className="wizard-kicker">{existingShiftForSlot ? t('editingShift') : t('newShift')}</span>
+            <strong>{shiftLabel(shiftName)} · {fmtDate(date)}</strong>
+          </div>
         </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
+          <X size={16} /> {t('cancel')}
+        </button>
       </div>
 
+      <ol className="stepper-nav" aria-label={t('navBuild')}>
+        {STEPS.map((s) => (
+          <li key={s.n} className={`stepper-nav-item ${step === s.n ? 'is-current' : ''} ${step > s.n ? 'is-done' : ''}`}>
+            <button type="button" disabled={!reachable(s.n) || !ready} onClick={() => goTo(s.n)} aria-current={step === s.n ? 'step' : undefined}>
+              <span className="stepper-nav-dot">{step > s.n ? <Check size={13} strokeWidth={3} /> : s.n}</span>
+              <span className="stepper-nav-label">{s.label}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+
       {!ready ? (
-        <div className="empty-state"><p>{t('addDeptsWorkers')}</p></div>
+        <div className="empty-state">
+          <p>{t('addDeptsWorkers')}</p>
+          <Link to="/team" className="btn btn-primary"><Users size={16} /> {t('goToTeam')}</Link>
+        </div>
       ) : (
         <>
-          <section className="step">
-            <div className="step-head">
-              <span className="step-num">1</span>
-              <h3>{t('stepWhen')}</h3>
-            </div>
-            <div className="when-row">
-              <div className="control-row">
+          {step === 1 && (
+            <section className="wizard-panel" key="s1">
+              <h2 className="wizard-title">{t('wizWhenTitle')}</h2>
+              <p className="wizard-sub">{t('wizWhenSub')}</p>
+              <div className="wizard-field">
                 <label className="label" htmlFor="shift-date">{t('date')}</label>
-                <input id="shift-date" type="date" value={date} onChange={(e) => { setDate(e.target.value); setResult(null); }} className="input" />
+                <input id="shift-date" type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setResult(null); } }} className="input wizard-date" />
               </div>
-              <div className="control-row control-row-grow">
+              <div className="wizard-field">
                 <span className="label">{t('shift')}</span>
-                <div className="shift-type-picker" role="radiogroup" aria-label={t('shift')}>
+                <div className="shift-type-picker shift-type-picker-lg" role="radiogroup" aria-label={t('shift')}>
                   {SHIFT_TYPES.map((s) => {
-                    const meta = shiftMeta(s);
-                    const Icon = meta.icon;
+                    const m = shiftMeta(s);
+                    const Icon = m.icon;
                     const st = (state.shiftTimes || {})[s] || {};
                     const exists = state.shifts.some((sh) => sh.date === date && sh.name === s);
                     return (
@@ -649,200 +682,188 @@ export default function Shifts() {
                         type="button"
                         role="radio"
                         aria-checked={shiftName === s}
-                        className={`shift-type-option tone-${meta.tone} ${shiftName === s ? 'shift-type-option-active' : ''}`}
+                        className={`shift-type-option tone-${m.tone} ${shiftName === s ? 'shift-type-option-active' : ''}`}
                         onClick={() => { setShiftName(s); setResult(null); }}
                       >
-                        <span className="tone-icon"><Icon size={16} /></span>
+                        <span className="tone-icon"><Icon size={18} /></span>
                         <span className="shift-type-text">
                           <span className="shift-type-name">{shiftLabel(s)}</span>
                           {st.start && st.end && <span className="shift-type-hours">{st.start}–{st.end}</span>}
                         </span>
-                        {exists && <span className="shift-type-saved" title={t('savedShifts')}><CheckCircle2 size={14} /></span>}
+                        {exists && <span className="shift-type-saved" title={t('alreadyScheduled')}><CheckCircle2 size={15} /></span>}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            </div>
-          </section>
-
-          <section className="step">
-            <div className="step-head">
-              <span className="step-num">2</span>
-              <h3>{t('step1Depts')}</h3>
-              <button className="btn btn-sm btn-ghost step-action" onClick={selectAllDepts}>{t('all')}</button>
-            </div>
-            <div className="dept-picker">
-              {groupedDepts.map((g) => {
-                if (g.type === 'single') {
-                  const d = g.dept;
-                  const active = selectedDepts.includes(d.id);
-                  const feats = getDeptFeatures(d);
-                  return (
-                    <button key={d.id} className={`dept-pick ${active ? 'dept-pick-active' : ''}`} onClick={() => toggleDept(d.id)}>
-                      <span className="dept-pick-name">
-                        {d.name}
-                        {feats.length > 0 && <span className="dept-pick-features">{feats.join(' · ')}</span>}
-                      </span>
-                      <span className="dept-pick-info">{getDeptInfo(d)}</span>
-                    </button>
-                  );
-                }
-                // group
-                const allSelected = g.children.every((c) => selectedDepts.includes(c.id));
-
-                return (
-                  <div key={g.parent.id} className="dept-pick-group">
-                    <div className="dept-pick-group-header">
-                      <span className="dept-pick-group-name">{g.parent.name}</span>
-                      <button className="btn btn-sm" onClick={() => {
-                        const childIds = g.children.map((c) => c.id);
-                        if (allSelected) {
-                          setSelectedDepts((p) => p.filter((id) => !childIds.includes(id)));
-                        } else {
-                          setSelectedDepts((p) => [...new Set([...p, ...childIds])]);
-                        }
-                        setResult(null);
-                      }}>{allSelected ? t('deselectAll') : t('selectAll')}</button>
-                    </div>
-                    <div className="dept-pick-children">
-                      {g.children.map((c) => {
-                        const active = selectedDepts.includes(c.id);
-                        const cFeats = getDeptFeatures(c);
-                        return (
-                          <button key={c.id} className={`dept-pick ${active ? 'dept-pick-active' : ''}`} onClick={() => toggleDept(c.id)}>
-                            <span className="dept-pick-name">
-                              {c.name}
-                              {cFeats.length > 0 && <span className="dept-pick-features">{cFeats.join(' · ')}</span>}
-                            </span>
-                            <span className="dept-pick-info">{getDeptInfo(c)}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="step">
-            <div className="step-head">
-              <span className="step-num">3</span>
-              <h3>{t('step2Workers')}</h3>
-              <div className="section-actions step-action">
-                <button className="btn btn-sm btn-smart" onClick={smartSelect} disabled={selectedDepts.length === 0}>
-                  <Sparkles size={14} /> {t('smart')}
-                </button>
-                <button className="btn btn-sm btn-ghost" onClick={selectAllWorkers}>{t('all')}</button>
-                <button className="btn btn-sm btn-ghost" onClick={clearWorkers}>{t('clear')}</button>
-              </div>
-            </div>
-            {selectedDepts.length === 0 ? (
-              <p className="hint">{t('selectDeptsFirst')}</p>
-            ) : relevantWorkers.length === 0 ? (
-              <p className="hint">{t('noWorkersAvailable')} {shiftLabel(shiftName)} {t('on')} {date}</p>
-            ) : (
-              <>
-                {/* Coverage bar — always visible once depts selected */}
-                {workerAnalysis.totalSlots > 0 && (
-                  <div className="coverage-section">
-                    <div className="coverage-bar-wrap">
-                      <div className="coverage-bar">
-                        <div
-                          className={`coverage-fill ${workerAnalysis.coverage === 100 ? 'coverage-full' : workerAnalysis.coverage >= 70 ? '' : 'coverage-low'}`}
-                          style={{ width: `${Math.max(workerAnalysis.coverage, 2)}%` }}
-                        />
-                      </div>
-                      <span className={`coverage-pct ${workerAnalysis.coverage === 100 ? 'coverage-pct-full' : ''}`}>
-                        {selectedWorkers.length > 0 ? `${workerAnalysis.coverage}%` : '—'}
-                      </span>
-                    </div>
-                    <div className="coverage-details">
-                      <span className="coverage-label">
-                        {t('positionsCovered', { filled: workerAnalysis.filledCount, total: workerAnalysis.totalSlots })}
-                        {workerAnalysis.coverage === 100 && <strong className="coverage-ready"> · {t('readyToAssign')}</strong>}
-                      </span>
-                      {workerAnalysis.gaps.length > 0 && (
-                        <div className="coverage-gaps">
-                          {workerAnalysis.gaps.map((g, i) => (
-                            <span key={i} className="coverage-gap-tag">{g.count} {g.role}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Worker chips — always all clickable */}
-                <div className="worker-pick-grid">
-                  {workerAnalysis.workers.map((w) => {
-                    const isSelected = selectedWorkers.includes(w.id);
-                    const isBestNext = !isSelected && workerAnalysis.bestNextId === w.id;
-                    return (
-                      <button
-                        key={w.id}
-                        className={`worker-chip ${isSelected ? 'worker-chip-on' : ''} ${isBestNext ? 'worker-chip-suggested' : ''} ${w.isCritical && !isSelected ? 'worker-chip-critical' : ''}`}
-                        onClick={() => toggleWorker(w.id)}
-                        aria-pressed={isSelected}
-                        title={w.isCritical && w.criticalFor.length > 0 ? `${t('onlyOptionFor')}: ${w.criticalFor.join(', ')}` : undefined}
-                      >
-                        <Avatar name={w.name} size="xs" />
-                        <span className="wc-name">{w.name}</span>
-                        {selectedWorkers.length > 0 && w.impact > 0 && !isSelected && (
-                          <span className="wc-impact wc-impact-add">+{w.impact}</span>
-                        )}
-                        {isSelected && w.impact > 0 && (
-                          <span className="wc-impact wc-impact-remove">-{w.impact}</span>
-                        )}
-                      </button>
-                    );
-                  })}
+              {existingShiftForSlot && (
+                <div className="alert alert-info">
+                  <CheckCircle2 size={16} />
+                  <span>{t('shiftAlreadyExists', { shift: shiftLabel(shiftName), date: fmtDate(date) })}</span>
                 </div>
-              </>
-            )}
-          </section>
-
-          {existingShiftForSlot && !result && (
-            <div className="alert alert-warning">
-              <AlertTriangle size={16} />
-              <span>{t('shiftAlreadyExists', { shift: shiftLabel(shiftName), date })}</span>
-            </div>
+              )}
+            </section>
           )}
 
-          <div className="action-bar">
-            <div className={`action-bar-summary tone-${shiftMeta(shiftName).tone}`}>
-              <span className="tone-icon">{(() => { const Icon = shiftMeta(shiftName).icon; return <Icon size={16} />; })()}</span>
-              <div className="action-bar-text">
-                <strong>{shiftLabel(shiftName)} · {fmtDate(date)}</strong>
-                <span>
-                  {hours.start && hours.end ? `${hours.start}–${hours.end} · ` : ''}
-                  {t('summaryCounts', { depts: selectedDepts.length, workers: selectedWorkers.length })}
-                  {workerAnalysis.totalSlots > 0 && selectedWorkers.length > 0 ? ` · ${workerAnalysis.coverage}%` : ''}
-                </span>
+          {step === 2 && (
+            <section className="wizard-panel" key="s2">
+              <div className="wizard-title-row">
+                <div>
+                  <h2 className="wizard-title">{t('wizDeptsTitle')}</h2>
+                  <p className="wizard-sub">{t('wizDeptsSub')}</p>
+                </div>
+                <button className="btn btn-sm btn-soft" onClick={selectAllDepts}>{t('selectAll')}</button>
               </div>
-            </div>
-            <button className="btn btn-primary btn-lg" onClick={generate} disabled={selectedDepts.length === 0 || selectedWorkers.length === 0}>
-              <Zap size={18} /> {result ? t('regenerate') : existingShiftForSlot ? t('reassignShift') : t('autoAssignShift')}
-            </button>
-          </div>
+              <div className="dept-picker">
+                {groupedDepts.map((g) => {
+                  if (g.type === 'single') return renderDeptButton(g.dept);
+                  const allSelected = g.children.every((c) => selectedDepts.includes(c.id));
+                  return (
+                    <div key={g.parent.id} className="dept-pick-group">
+                      <div className="dept-pick-group-header">
+                        <span className="dept-pick-group-name"><Building2 size={14} /> {g.parent.name}</span>
+                        <button className="btn btn-sm btn-ghost" onClick={() => {
+                          const childIds = g.children.map((c) => c.id);
+                          if (allSelected) {
+                            setSelectedDepts((p) => p.filter((id) => !childIds.includes(id)));
+                          } else {
+                            setSelectedDepts((p) => [...new Set([...p, ...childIds])]);
+                          }
+                          setResult(null);
+                        }}>{allSelected ? t('deselectAll') : t('selectAll')}</button>
+                      </div>
+                      <div className="dept-pick-children">
+                        {g.children.map(renderDeptButton)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
-          {result && (
-            <div className="shift-result">
-              <div className="result-toolbar">
-                {history.length > 0 && (
-                  <button className="btn btn-sm" onClick={undo}><Undo2 size={14} /> {t('undo')}</button>
-                )}
-                {selectedSwapWorker ? (
-                  <span className="hint hint-swap">{t('clickGreenToSwap')} · <button className="btn-link" onClick={() => setSelectedSwapWorker(null)}>{t('cancelSwap')}</button></span>
-                ) : (
-                  <span className="hint">{t('clickWorkerForSwap')}</span>
-                )}
+          {step === 3 && (
+            <section className="wizard-panel" key="s3">
+              <div className="wizard-title-row">
+                <div>
+                  <h2 className="wizard-title">{t('wizWorkersTitle')}</h2>
+                  <p className="wizard-sub">{t('wizWorkersSub')}</p>
+                </div>
+                <div className="section-actions">
+                  <button className="btn btn-sm btn-smart" onClick={() => { smartSelect(); setAutoPicked(true); }}>
+                    <Sparkles size={14} /> {t('smart')}
+                  </button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => { selectAllWorkers(); setAutoPicked(false); }}>{t('all')}</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => { clearWorkers(); setAutoPicked(false); }}>{t('clear')}</button>
+                </div>
               </div>
+
+              {relevantWorkers.length === 0 ? (
+                <div className="empty-state"><p>{t('noWorkersAvailable')} {shiftLabel(shiftName)} {t('on')} {fmtDate(date)}</p></div>
+              ) : (
+                <>
+                  {autoPicked && selectedWorkers.length > 0 && (
+                    workerAnalysis.coverage === 100 ? (
+                      <div className="alert alert-info">
+                        <Sparkles size={16} />
+                        <span>{t('autoPickedHint')}</span>
+                      </div>
+                    ) : (
+                      <div className="alert alert-warning">
+                        <Sparkles size={16} />
+                        <span>{t('autoPickedPartial', { n: workerAnalysis.totalSlots - workerAnalysis.filledCount })}</span>
+                      </div>
+                    )
+                  )}
+
+                  {workerAnalysis.totalSlots > 0 && (
+                    <div className="coverage-section">
+                      <div className="coverage-bar-wrap">
+                        <div className="coverage-bar">
+                          <div
+                            className={`coverage-fill ${workerAnalysis.coverage === 100 ? 'coverage-full' : workerAnalysis.coverage >= 70 ? '' : 'coverage-low'}`}
+                            style={{ width: `${Math.max(workerAnalysis.coverage, 2)}%` }}
+                          />
+                        </div>
+                        <span className={`coverage-pct ${workerAnalysis.coverage === 100 ? 'coverage-pct-full' : ''}`}>
+                          {selectedWorkers.length > 0 ? `${workerAnalysis.coverage}%` : '—'}
+                        </span>
+                      </div>
+                      <div className="coverage-details">
+                        <span className="coverage-label">
+                          {t('positionsCovered', { filled: workerAnalysis.filledCount, total: workerAnalysis.totalSlots })}
+                          {workerAnalysis.coverage === 100 && <strong className="coverage-ready"> · {t('readyToAssign')}</strong>}
+                        </span>
+                        {workerAnalysis.gaps.length > 0 && (
+                          <div className="coverage-gaps">
+                            {workerAnalysis.gaps.map((g, i) => (
+                              <span key={i} className="coverage-gap-tag">{g.count} {g.role}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="worker-pick-grid">
+                    {workerAnalysis.workers.map((w) => {
+                      const isSelected = selectedWorkers.includes(w.id);
+                      const isBestNext = !isSelected && workerAnalysis.bestNextId === w.id;
+                      return (
+                        <button
+                          key={w.id}
+                          className={`worker-chip ${isSelected ? 'worker-chip-on' : ''} ${isBestNext ? 'worker-chip-suggested' : ''} ${w.isCritical && !isSelected ? 'worker-chip-critical' : ''}`}
+                          onClick={() => { toggleWorker(w.id); setAutoPicked(false); }}
+                          aria-pressed={isSelected}
+                          title={w.isCritical && w.criticalFor.length > 0 ? `${t('onlyOptionFor')}: ${w.criticalFor.join(', ')}` : undefined}
+                        >
+                          <Avatar name={w.name} size="xs" />
+                          <span className="wc-name">{w.name}</span>
+                          {isSelected && <Check size={14} strokeWidth={3} className="wc-check" />}
+                          {selectedWorkers.length > 0 && w.impact > 0 && !isSelected && (
+                            <span className="wc-impact wc-impact-add">+{w.impact}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="hint wizard-legend">
+                    <span className="legend-dot legend-suggested" /> {t('legendSuggested')}
+                    <span className="legend-dot legend-critical" /> {t('legendCritical')}
+                  </p>
+                </>
+              )}
+            </section>
+          )}
+
+          {step === 4 && result && (
+            <section className="wizard-panel wizard-panel-wide" key="s4">
+              <div className="wizard-title-row">
+                <div>
+                  <h2 className="wizard-title">{t('wizReviewTitle')}</h2>
+                  <p className="wizard-sub">{t('wizReviewSub')}</p>
+                </div>
+                <div className="section-actions">
+                  {history.length > 0 && (
+                    <button className="btn btn-sm btn-ghost" onClick={undo}><Undo2 size={14} /> {t('undo')}</button>
+                  )}
+                  <button className="btn btn-sm btn-ghost" onClick={generate}><RotateCcw size={14} /> {t('regenerate')}</button>
+                  <button className="btn btn-sm btn-whatsapp" onClick={() => {
+                    setShareShift({ date, name: shiftName, assignments: result.assignments, gaps: result.gaps, deptNames: deptNameOverrides, workerTimes: workerTimeOverrides });
+                  }}><Image size={14} /> {t('shareAsImage')}</button>
+                </div>
+              </div>
+
+              {selectedSwapWorker && (
+                <div className="alert alert-info">
+                  <span>{t('clickGreenToSwap')}</span>
+                  <button className="btn-link" onClick={() => setSelectedSwapWorker(null)}>{t('cancelSwap')}</button>
+                </div>
+              )}
 
               {totalGaps > 0 && (
                 <div className="alert alert-warning">
-                  <AlertTriangle size={18} />
+                  <AlertTriangle size={16} />
                   <span>{totalGaps} {totalGaps !== 1 ? t('positionsOpenAlertPlural') : t('positionsOpenAlert')}</span>
                 </div>
               )}
@@ -875,6 +896,9 @@ export default function Shifts() {
                             <Pencil size={12} className="dept-name-edit-icon" />
                           </span>
                         )}
+                        {hasDeptGap
+                          ? <span className="status status-warning"><AlertTriangle size={12} /></span>
+                          : <span className="status status-success"><CheckCircle2 size={12} /></span>}
                       </div>
                       {roles.map((role) => {
                         const needed = (dept.requirements || {})[role.id] || 0;
@@ -896,6 +920,11 @@ export default function Shifts() {
                               {assigned.map((wid) => {
                                 const isSelected = selectedSwapWorker === wid;
                                 const isSafeSwap = selectedSwapWorker && selectedSwapWorker !== wid && safeSwapWorkerIds.has(wid);
+                                const key = `${dept.id}::${wid}`;
+                                const globalTimes = (state.shiftTimes || {})[shiftName] || {};
+                                const ovr = workerTimeOverrides[key];
+                                const start = ovr ? ovr.start : (globalTimes.start || '');
+                                const end = ovr ? ovr.end : (globalTimes.end || '');
                                 return (
                                   <div
                                     key={wid}
@@ -903,34 +932,22 @@ export default function Shifts() {
                                     draggable
                                     onDragStart={() => handleDragStart(wid)}
                                     onClick={() => {
-                                      if (isSafeSwap) {
-                                        performSwap(wid);
-                                      } else if (isSelected) {
-                                        setSelectedSwapWorker(null);
-                                      } else {
-                                        setSelectedSwapWorker(wid);
-                                      }
+                                      if (isSafeSwap) performSwap(wid);
+                                      else if (isSelected) setSelectedSwapWorker(null);
+                                      else setSelectedSwapWorker(wid);
                                     }}
                                   >
                                     <Avatar name={getWorkerName(wid)} size="xs" />
                                     <span className="dept-worker-name">{getWorkerName(wid)}</span>
-                                    {(() => {
-                                      const key = `${dept.id}::${wid}`;
-                                      const globalTimes = (state.shiftTimes || {})[shiftName] || {};
-                                      const ovr = workerTimeOverrides[key];
-                                      const start = ovr ? ovr.start : (globalTimes.start || '');
-                                      const end = ovr ? ovr.end : (globalTimes.end || '');
-                                      return (start || end) ? (
-                                        <span className="worker-time">
-                                          <input type="time" className="time-mini" value={start} onChange={(e) => setWorkerTimeOverrides((p) => ({ ...p, [key]: { start: e.target.value, end } }))} />
-                                          <span>-</span>
-                                          <input type="time" className="time-mini" value={end} onChange={(e) => setWorkerTimeOverrides((p) => ({ ...p, [key]: { start, end: e.target.value } }))} />
-                                        </span>
-                                      ) : null;
-                                    })()}
                                     {isSelected && <span className="swap-badge">{t('clickGreen')}</span>}
                                     {isSafeSwap && <span className="swap-badge swap-badge-safe">{t('safeSwap')}</span>}
-                                    <span className="drag-hint" aria-hidden="true">⠿</span>
+                                    {(start || end) && (
+                                      <span className="worker-time" onClick={(e) => e.stopPropagation()}>
+                                        <input type="time" className="time-mini" aria-label={t('startTime')} value={start} onChange={(e) => setWorkerTimeOverrides((p) => ({ ...p, [key]: { start: e.target.value, end } }))} />
+                                        <span>–</span>
+                                        <input type="time" className="time-mini" aria-label={t('endTime')} value={end} onChange={(e) => setWorkerTimeOverrides((p) => ({ ...p, [key]: { start, end: e.target.value } }))} />
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -945,117 +962,40 @@ export default function Shifts() {
               </div>
 
               {result.unassigned.length > 0 && (
-                <div className="section">
+                <div className="unassigned-tray">
                   <h4>{t('unassignedWorkers')}</h4>
                   <div className="chip-group">
                     {result.unassigned.map((wid) => (
-                      <span
-                        key={wid}
-                        className="chip chip-static chip-muted chip-draggable"
-                        draggable
-                        onDragStart={() => handleDragStart(wid)}
-                      >
+                      <span key={wid} className="chip chip-static chip-muted chip-draggable" draggable onDragStart={() => handleDragStart(wid)}>
                         <Avatar name={getWorkerName(wid)} size="xs" />
                         {getWorkerName(wid)}
-                        <span className="drag-hint" aria-hidden="true">⠿</span>
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-
-              <div className="save-actions">
-                <button className="btn btn-primary" onClick={save}>
-                  <Save size={18} /> {existingShiftForSlot ? t('updateShift') : t('saveShift')}
-                </button>
-                <button className="btn btn-whatsapp" onClick={() => {
-                  setShareShift({ date, name: shiftName, assignments: result.assignments, gaps: result.gaps, deptNames: deptNameOverrides });
-                }}><Image size={18} /> {t('shareAsImage')}</button>
-              </div>
-            </div>
+            </section>
           )}
+
+          <div className="action-bar wizard-bar">
+            <button type="button" className="btn btn-lg btn-ghost wizard-back" onClick={goBack}>
+              {step === 1 ? <><X size={18} /> <span>{t('cancel')}</span></> : <><ArrowLeft size={18} className="flip-rtl" /> <span>{t('back')}</span></>}
+            </button>
+            <div className="wizard-bar-info">
+              <span className="wizard-bar-step">{t('stepOf', { n: step, total: STEPS.length })}</span>
+              <span className="wizard-bar-detail">{barInfo()}</span>
+            </div>
+            <button type="button" className="btn btn-primary btn-lg" onClick={goNext} disabled={!canNext}>
+              {step === 3
+                ? <><Zap size={18} /> {t('autoAssignShift')}</>
+                : step === 4
+                  ? <><Save size={18} /> {existingShiftForSlot ? t('updateShift') : t('saveShift')}</>
+                  : <>{t('next')} <ArrowRight size={18} className="flip-rtl" /></>}
+            </button>
+          </div>
         </>
       )}
 
-      {existingShifts.length > 0 && (
-        <section className="section saved-shifts">
-          <h2 className="section-title">{t('savedShifts')} <span className="count-pill">{existingShifts.length}</span></h2>
-          <div className="card-list">
-            {existingShifts.map((shift) => {
-              const isExp = expandedShift === shift.id;
-              const sg = shift.gaps || {};
-              const openCount = countGaps(sg);
-              const meta = shiftMeta(shift.name);
-              const Icon = meta.icon;
-              return (
-                <div key={shift.id} className={`card card-shift tone-${meta.tone} ${isExp ? 'card-shift-open' : ''}`}>
-                  <button type="button" className="card-content card-clickable" onClick={() => setExpandedShift(isExp ? null : shift.id)} aria-expanded={isExp}>
-                    <div className="shift-summary">
-                      <span className="tone-pill"><Icon size={13} /> {shiftLabel(shift.name)}</span>
-                      <span className="card-title">{fmtDate(shift.date)}</span>
-                      <span className="card-meta">{t('workersAssigned', { n: countAssigned(shift.assignments) })}</span>
-                      {openCount > 0
-                        ? <span className="status status-warning"><AlertTriangle size={13} /> {t('openCount', { n: openCount })}</span>
-                        : <span className="status status-success"><CheckCircle2 size={13} /> {t('allFilledShort')}</span>}
-                    </div>
-                    <ChevronDown size={18} className="chevron" />
-                  </button>
-                  {isExp && (
-                    <div className="shift-detail">
-                      {allDepts.map((dept) => {
-                        const da = (shift.assignments && shift.assignments[dept.id]) || {};
-                        const dgObj = sg[dept.id] || {};
-                        const hasAny = roles.some((r) => ((da[r.id]) || []).length > 0 || (dgObj[r.id] || 0) > 0);
-                        if (!hasAny) return null;
-                        return (
-                          <div key={dept.id} className="shift-dept-block">
-                            <span className="shift-dept-name">{(shift.deptNames && shift.deptNames[dept.id]) || getDeptLabel(dept)}</span>
-                            {roles.map((role) => {
-                              const asg = da[role.id] || [];
-                              const gp = dgObj[role.id] || 0;
-                              if ((!Array.isArray(asg) || asg.length === 0) && gp === 0) return null;
-                              return (
-                                <div key={role.id} className="shift-role-row">
-                                  <span className="shift-role-name">{role.name}</span>
-                                  <div className="chip-group chip-group-sm">
-                                    {(Array.isArray(asg) ? asg : []).map((wid) => (
-                                      <span key={wid} className="chip chip-static chip-sm">{getWorkerName(wid)}</span>
-                                    ))}
-                                    {gp > 0 && <span className="chip chip-static chip-sm chip-gap">+{gp} {t('needed')}</span>}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                      <div className="shift-actions">
-                        <button className="btn btn-sm btn-whatsapp" onClick={() => setShareShift(shift)}>
-                          <Image size={14} /> {t('shareAsImage')}
-                        </button>
-                        <button className="btn btn-sm" onClick={() => copyShiftText(shift)}>
-                          {t('copyText')}
-                        </button>
-                        {confirmDeleteId === shift.id ? (
-                          <span className="confirm-inline">
-                            <span>{t('deleteShiftConfirm')}</span>
-                            <button className="btn btn-sm btn-danger-solid" onClick={() => { deleteShift(shift.id); setConfirmDeleteId(null); }}>{t('yes')}</button>
-                            <button className="btn btn-sm btn-ghost" onClick={() => setConfirmDeleteId(null)}>{t('no')}</button>
-                          </span>
-                        ) : (
-                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteId(shift.id)}>
-                            <Trash2 size={14} /> {t('delete')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
       {shareShift && (
         <ShiftImage
           shift={shareShift}

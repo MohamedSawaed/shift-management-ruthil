@@ -6,7 +6,7 @@ import { Plus, Pencil, Check, X, Clock, Palmtree, Search } from 'lucide-react';
 import Avatar from '../components/Avatar';
 import ConfirmDelete from '../components/ConfirmDelete';
 
-export default function Workers() {
+export default function Workers({ embedded = false }) {
   const { state, dispatch } = useApp();
   const { t } = useLang();
   const [name, setName] = useState('');
@@ -44,19 +44,21 @@ export default function Workers() {
   const vacationCount = state.workers.filter((w) => w.onVacation).length;
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>{t('workersTitle')}</h1>
-          <p className="subtitle">{t('workersSubtitle')}</p>
-        </div>
-        {state.workers.length > 0 && (
-          <div className="header-stats">
-            <span className="header-stat"><strong>{state.workers.length}</strong> {t('workersCount')}</span>
-            {vacationCount > 0 && <span className="header-stat header-stat-warning"><Palmtree size={13} /> <strong>{vacationCount}</strong> {t('onVacation')}</span>}
+    <div className={embedded ? undefined : 'page'}>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <h1>{t('workersTitle')}</h1>
+            <p className="subtitle">{t('workersSubtitle')}</p>
           </div>
-        )}
-      </div>
+          {state.workers.length > 0 && (
+            <div className="header-stats">
+              <span className="header-stat"><strong>{state.workers.length}</strong> {t('workersCount')}</span>
+              {vacationCount > 0 && <span className="header-stat header-stat-warning"><Palmtree size={13} /> <strong>{vacationCount}</strong> {t('onVacation')}</span>}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="toolbar">
         <form className="add-form" onSubmit={add}>

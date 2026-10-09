@@ -4,7 +4,7 @@ import { useLang } from '../i18n/LangContext';
 import { Plus, GripVertical } from 'lucide-react';
 import ConfirmDelete from '../components/ConfirmDelete';
 
-export default function Roles() {
+export default function Roles({ embedded = false }) {
   const { state, dispatch } = useApp();
   const { t } = useLang();
   const [name, setName] = useState('');
@@ -35,13 +35,15 @@ export default function Roles() {
   const sorted = [...state.roles].sort((a, b) => a.priority - b.priority);
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>{t('rolesTitle')}</h1>
-          <p className="subtitle">{t('rolesSubtitle')}</p>
+    <div className={embedded ? undefined : 'page'}>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <h1>{t('rolesTitle')}</h1>
+            <p className="subtitle">{t('rolesSubtitle')}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <form className="add-form" onSubmit={add}>
         <input type="text" placeholder={t('roleNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} className="input" />

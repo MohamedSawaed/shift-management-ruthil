@@ -5,7 +5,7 @@ import { Plus, GripVertical, ChevronDown, UserPlus, Tag, X } from 'lucide-react'
 import { Link } from 'react-router-dom';
 import ConfirmDelete from '../components/ConfirmDelete';
 
-export default function Departments() {
+export default function Departments({ embedded = false }) {
   const { state, dispatch } = useApp();
   const { t } = useLang();
   const [name, setName] = useState('');
@@ -333,13 +333,15 @@ export default function Departments() {
   };
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1>{t('departmentsTitle')}</h1>
-          <p className="subtitle">{t('departmentsSubtitle')}</p>
+    <div className={embedded ? undefined : 'page'}>
+      {!embedded && (
+        <div className="page-header">
+          <div>
+            <h1>{t('departmentsTitle')}</h1>
+            <p className="subtitle">{t('departmentsSubtitle')}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <form className="add-form" onSubmit={startAdd}>
         <input type="text" placeholder={t('deptNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} className="input" />
@@ -364,7 +366,7 @@ export default function Departments() {
 
       {roles.length === 0 && sorted.length > 0 && (
         <div className="alert alert-warning">
-          <span><Link to="/roles" className="alert-link">{t('addRolesFirst')}</Link> {t('toConfigureReqs')}</span>
+          <span><Link to="/team?tab=roles" className="alert-link">{t('addRolesFirst')}</Link> {t('toConfigureReqs')}</span>
         </div>
       )}
 

@@ -131,7 +131,7 @@ export const translations = {
 
     // Workers
     workersTitle: 'Workers',
-    workersSubtitle: 'Add workers and set their shift availability. Assign to departments in the Departments page.',
+    workersSubtitle: 'Add workers and set their shift availability. Assign them to departments in the Departments tab.',
     workerNamePlaceholder: 'Worker name',
     addWorker: 'Add Worker',
     searchWorkers: 'Search workers...',
@@ -160,7 +160,7 @@ export const translations = {
     autoAssignShift: 'Auto-Assign Shift',
     regenerate: 'Re-generate',
     reassignShift: 'Re-assign Shift',
-    shiftAlreadyExists: 'A {shift} shift already exists for {date}. Generating will let you update it.',
+    shiftAlreadyExists: '{shift} on {date} is already scheduled — continuing will update it.',
     clickWorkerForSwap: 'Click a worker to see safe swaps · Drag to move freely',
     clickGreenToSwap: 'Click a green worker to swap',
     cancelSwap: 'Cancel',
@@ -181,7 +181,7 @@ export const translations = {
     mustHave: 'Must have',
     safeSwap: 'Safe swap',
     clickGreen: 'Click green to swap',
-    copiedToClipboard: 'Shift copied to clipboard!',
+    copiedToClipboard: 'Copied — ready to paste in WhatsApp',
 
     // Planner
     plannerTitle: 'Weekly Planner',
@@ -190,7 +190,7 @@ export const translations = {
     next: 'Next',
 
     // Analytics
-    analyticsTitle: 'Analytics',
+    analyticsTitle: 'Insights',
     analyticsSubtitle: 'Shift history, workload balance, and fill rates',
     noShiftsSaved: 'No shifts saved yet. Create some shifts first.',
     avgShiftsWorker: 'Avg Shifts / Worker',
@@ -272,6 +272,38 @@ export const translations = {
     deleteConfirm: 'Delete?',
     deleteDeptConfirm: 'Delete with sub-departments?',
     weekSummary: '{shifts} shifts this week',
+
+    // Interface v3 — schedule-first + guided builder
+    navSchedule: 'Schedule',
+    navTeam: 'Team',
+    navInsights: 'Insights',
+    newShiftShort: 'New',
+    teamTitle: 'Team',
+    thisWeek: 'This week',
+    toastSaved: 'Shift saved',
+    toastUpdated: 'Shift updated',
+    toastDeleted: 'Shift deleted',
+    stepReview: 'Review',
+    stepOf: 'Step {n} of {total}',
+    back: 'Back',
+    editingShift: 'Editing shift',
+    alreadyScheduled: 'Already scheduled',
+    wizWhenTitle: 'When is this shift?',
+    wizWhenSub: 'Pick the date and which shift you are planning.',
+    wizDeptsTitle: 'Which departments are working?',
+    wizDeptsSub: 'Select every department that needs people on this shift.',
+    wizWorkersTitle: 'Who is working?',
+    wizWorkersSub: 'Only people who are free for this shift are listed. Tap to add or remove.',
+    autoPickedHint: 'We pre-selected the smallest team that covers every position. Adjust it if you like, then continue.',
+    autoPickedPartial: 'We pre-selected the best team available, but {n} positions can’t be covered by anyone free for this shift. You can still continue — they’ll show as open.',
+    legendSuggested: 'Best next pick',
+    legendCritical: 'Only person who can fill a position',
+    wizReviewTitle: 'Review the assignment',
+    wizReviewSub: 'Drag people between positions, or tap someone to see safe swaps. Names and times are editable.',
+    deptsSelected: '{n} departments selected',
+    goToTeam: 'Set up your team',
+    startTime: 'Start time',
+    endTime: 'End time',
   },
 
   he: {
@@ -405,7 +437,7 @@ export const translations = {
 
     // Workers
     workersTitle: 'עובדים',
-    workersSubtitle: 'הוסף עובדים וקבע את זמינותם למשמרות. שבץ למחלקות בעמוד המחלקות.',
+    workersSubtitle: 'הוסף עובדים וקבע את זמינותם למשמרות. שבץ אותם למחלקות בלשונית המחלקות.',
     workerNamePlaceholder: 'שם עובד',
     addWorker: 'הוסף עובד',
     searchWorkers: 'חיפוש עובדים...',
@@ -434,7 +466,7 @@ export const translations = {
     autoAssignShift: 'שיבוץ אוטומטי',
     regenerate: 'צור מחדש',
     reassignShift: 'שבץ מחדש',
-    shiftAlreadyExists: 'כבר קיימת משמרת {shift} לתאריך {date}. יצירה חדשה תאפשר לעדכן אותה.',
+    shiftAlreadyExists: '{shift} בתאריך {date} כבר מתוכננת — המשך יעדכן אותה.',
     clickWorkerForSwap: 'לחץ על עובד כדי לראות החלפות בטוחות · גרור להזזה חופשית',
     clickGreenToSwap: 'לחץ על עובד ירוק כדי להחליף',
     cancelSwap: 'בטל',
@@ -455,7 +487,7 @@ export const translations = {
     mustHave: 'חובה',
     safeSwap: 'החלפה בטוחה',
     clickGreen: 'לחץ ירוק להחלפה',
-    copiedToClipboard: 'המשמרת הועתקה ללוח!',
+    copiedToClipboard: 'הועתק — מוכן להדבקה בוואטסאפ',
 
     // Planner
     plannerTitle: 'יומן שבועי',
@@ -464,7 +496,7 @@ export const translations = {
     next: 'הבא',
 
     // Analytics
-    analyticsTitle: 'נתונים',
+    analyticsTitle: 'תובנות',
     analyticsSubtitle: 'היסטוריית משמרות, איזון עומסים ואחוזי מילוי',
     noShiftsSaved: 'אין משמרות שמורות עדיין. צור משמרות קודם.',
     avgShiftsWorker: 'ממוצע משמרות / עובד',
@@ -546,5 +578,37 @@ export const translations = {
     deleteConfirm: 'למחוק?',
     deleteDeptConfirm: 'למחוק כולל תתי-מחלקות?',
     weekSummary: '{shifts} משמרות השבוע',
+
+    // Interface v3 — schedule-first + guided builder
+    navSchedule: 'לוח משמרות',
+    navTeam: 'צוות',
+    navInsights: 'תובנות',
+    newShiftShort: 'חדשה',
+    teamTitle: 'צוות',
+    thisWeek: 'השבוע',
+    toastSaved: 'המשמרת נשמרה',
+    toastUpdated: 'המשמרת עודכנה',
+    toastDeleted: 'המשמרת נמחקה',
+    stepReview: 'סקירה',
+    stepOf: 'שלב {n} מתוך {total}',
+    back: 'חזרה',
+    editingShift: 'עריכת משמרת',
+    alreadyScheduled: 'כבר מתוכננת',
+    wizWhenTitle: 'מתי המשמרת?',
+    wizWhenSub: 'בחר תאריך ואת סוג המשמרת שאתה מתכנן.',
+    wizDeptsTitle: 'אילו מחלקות עובדות?',
+    wizDeptsSub: 'בחר את כל המחלקות שצריכות עובדים במשמרת הזו.',
+    wizWorkersTitle: 'מי עובד?',
+    wizWorkersSub: 'מוצגים רק עובדים פנויים למשמרת הזו. הקש כדי להוסיף או להסיר.',
+    autoPickedHint: 'בחרנו מראש את הצוות הקטן ביותר שמכסה את כל העמדות. אפשר לשנות ואז להמשיך.',
+    autoPickedPartial: 'בחרנו מראש את הצוות הטוב ביותר שזמין, אבל {n} עמדות לא ניתנות לאיוש על ידי עובדים פנויים למשמרת הזו. אפשר להמשיך — הן יסומנו כפתוחות.',
+    legendSuggested: 'הבחירה הבאה הטובה ביותר',
+    legendCritical: 'היחיד שיכול לאייש עמדה',
+    wizReviewTitle: 'סקירת השיבוץ',
+    wizReviewSub: 'גרור עובדים בין עמדות, או הקש על עובד כדי לראות החלפות בטוחות. שמות ושעות ניתנים לעריכה.',
+    deptsSelected: '{n} מחלקות נבחרו',
+    goToTeam: 'הגדרת הצוות',
+    startTime: 'שעת התחלה',
+    endTime: 'שעת סיום',
   },
 };
