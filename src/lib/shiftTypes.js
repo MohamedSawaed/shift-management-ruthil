@@ -46,3 +46,25 @@ export function localDateISO(date = new Date()) {
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+
+// Absolute [start, end) in minutes for a shift on `iso` running start→end
+// ("HH:MM"); an end at or before the start means it runs past midnight.
+// null when the times aren't set.
+export function shiftInterval(iso, start, end) {
+  if (!iso || !start || !end) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  const toMin = (hhmm) => {
+    const [h, mm] = String(hhmm).split(':').map(Number);
+    return h * 60 + mm;
+  };
+  const base = Math.round(Date.UTC(y, m - 1, d) / 86400000) * 1440;
+  const s = base + toMin(start);
+  let e = base + toMin(end);
+  if (e <= s) e += 1440;
+  return [s, e];
+}
+
+export function addDays(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return localDateISO(new Date(y, m - 1, d + n));
+}

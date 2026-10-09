@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useApp, autoAssign, isWorkerAvailable } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO } from '../lib/shiftTypes';
+import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO, shiftInterval, addDays } from '../lib/shiftTypes';
 import Avatar from '../components/Avatar';
 import { expandWorkers, workerName as nameOf, sortByName } from '../lib/workers';
 import { Zap, Save, AlertTriangle, Undo2, Pencil, Image, Sparkles, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
@@ -85,24 +85,38 @@ export default function Shifts() {
     return groups;
   }, [allDepts, state.departments]);
 
-  // Workers already used in other saved shifts on the same date. The shift
-  // being (re)built itself doesn't count — otherwise re-assigning an existing
-  // shift would hide everyone currently on it.
-  const busyWorkerIds = useMemo(() => {
-    const busy = new Set();
-    const sameDateShifts = state.shifts.filter((s) => s.date === date && s.name !== shiftName);
-    for (const shift of sameDateShifts) {
+  // Who is already working at the same time as this shift, and on which
+  // shift. Based on real time overlap (shift hours from Settings, or a
+  // person's own hours on that shift), not just the same date — so the same
+  // people can do Morning and Night on one day, while Afternoon (which
+  // overlaps both) still blocks them. Also catches last night's Night shift
+  // running into this morning. Without hours set, any shift on the same date
+  // counts. The shift being (re)built itself never counts.
+  const busyInfo = useMemo(() => {
+    const busy = new Map(); // worker/member id → names of the clashing shifts
+    const times = state.shiftTimes || {};
+    const own = times[shiftName] || {};
+    const target = shiftInterval(date, own.start, own.end);
+    const near = new Set([addDays(date, -1), date, addDays(date, 1)]);
+    for (const shift of state.shifts) {
+      if (!near.has(shift.date)) continue;
+      if (shift.date === date && shift.name === shiftName) continue;
+      const def = times[shift.name] || {};
       const assign = shift.assignments || {};
       for (const dId of Object.keys(assign)) {
-        for (const rId of Object.keys(assign[dId])) {
+        for (const rId of Object.keys(assign[dId] || {})) {
           for (const wid of (assign[dId][rId] || [])) {
-            busy.add(wid);
+            const wt = (shift.workerTimes || {})[`${dId}::${wid}`] || {};
+            const iv = shiftInterval(shift.date, wt.start || def.start, wt.end || def.end);
+            const clash = target && iv ? iv[0] < target[1] && target[0] < iv[1] : shift.date === date;
+            if (clash) busy.set(wid, [...new Set([...(busy.get(wid) || []), shift.name])]);
           }
         }
       }
     }
     return busy;
-  }, [state.shifts, date, shiftName]);
+  }, [state.shifts, state.shiftTimes, date, shiftName]);
+  const busyWorkerIds = useMemo(() => new Set(busyInfo.keys()), [busyInfo]);
 
   // Workers available for this date+shift and relevant to selected depts
   // Excludes workers already assigned to another shift on the same date
@@ -122,6 +136,21 @@ export default function Shifts() {
       return (w.assignments || []).some((a) => relevantDeptIds.has(a.deptId));
     });
   }, [units, state.departments, selectedDepts, date, shiftName, busyWorkerIds]);
+
+  // People who would be listed but are on an overlapping shift — said out
+  // loud in the Workers step instead of silently disappearing.
+  const hiddenBusy = useMemo(() => {
+    const parentIds = new Set();
+    for (const dId of selectedDepts) {
+      const dept = state.departments.find((d) => d.id === dId);
+      if (dept && dept.parentId) parentIds.add(dept.parentId);
+    }
+    const relevantDeptIds = new Set([...selectedDepts, ...parentIds]);
+    const hidden = units.filter((w) => busyInfo.has(w.id) && !w.onVacation && isWorkerAvailable(w, date, shiftName)
+      && (w.assignments || []).some((a) => relevantDeptIds.has(a.deptId)));
+    const names = new Set(hidden.flatMap((w) => busyInfo.get(w.id)));
+    return { count: hidden.length, shifts: SHIFT_TYPES.filter((st) => names.has(st)) };
+  }, [units, state.departments, selectedDepts, date, shiftName, busyInfo]);
 
   const toggleDept = (id) => { setSelectedDepts((p) => p.includes(id) ? p.filter((d) => d !== id) : [...p, id]); setResult(null); };
   const selectAllDepts = () => { setSelectedDepts(allDepts.map((d) => d.id)); setResult(null); };
@@ -772,6 +801,13 @@ export default function Shifts() {
                   <button className="btn btn-sm btn-ghost" onClick={() => { clearWorkers(); setAutoPicked(false); }}>{t('clear')}</button>
                 </div>
               </div>
+
+              {hiddenBusy.count > 0 && (
+                <div className="alert alert-info">
+                  <Users size={16} />
+                  <span>{t('hiddenOverlap', { n: hiddenBusy.count, shifts: hiddenBusy.shifts.map(shiftLabel).join(', ') })}</span>
+                </div>
+              )}
 
               {relevantWorkers.length === 0 ? (
                 <div className="empty-state"><p>{t('noWorkersAvailable')} {shiftLabel(shiftName)} {t('on')} {fmtDate(date)}</p></div>
