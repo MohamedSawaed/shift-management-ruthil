@@ -4,6 +4,7 @@ import { useLang } from '../i18n/LangContext';
 import { Plus, GripVertical, ChevronDown, UserPlus, Tag, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ConfirmDelete from '../components/ConfirmDelete';
+import { groupSize } from '../lib/workers';
 
 export default function Departments({ embedded = false }) {
   const { state, dispatch } = useApp();
@@ -300,7 +301,7 @@ export default function Departments({ embedded = false }) {
                       } else {
                         toggleWorkerInDept(dept.id, worker.id);
                       }
-                    }}>{worker.name}</button>
+                    }}>{worker.name}{worker.isGroup && <span className="chip-qty">×{groupSize(worker)}</span>}</button>
                     {inDept && roles.length > 0 && (
                       <div className="role-chips">
                         <span className="role-chips-label">{t('rolesLabel')}</span>

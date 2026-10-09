@@ -304,6 +304,12 @@ export const translations = {
     goToTeam: 'Set up your team',
     startTime: 'Start time',
     endTime: 'End time',
+
+    // Worker groups
+    quantity: 'How many',
+    quantityHint: 'More than 1 creates a group (e.g. 20 workers with the same departments, roles and availability)',
+    addGroup: 'Add group of {n}',
+    groupOf: 'Group · {n}',
   },
 
   he: {
@@ -610,5 +616,11 @@ export const translations = {
     goToTeam: 'הגדרת הצוות',
     startTime: 'שעת התחלה',
     endTime: 'שעת סיום',
+
+    // Worker groups
+    quantity: 'כמות',
+    quantityHint: 'יותר מ-1 יוצר קבוצה (למשל 20 עובדים עם אותן מחלקות, תפקידים וזמינות)',
+    addGroup: 'הוסף קבוצה של {n}',
+    groupOf: 'קבוצה · {n}',
   },
 };

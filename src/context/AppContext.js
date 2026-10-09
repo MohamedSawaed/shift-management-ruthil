@@ -137,7 +137,13 @@ function reducer(state, action) {
       return { ...state, departments: action.payload };
 
     case 'ADD_WORKER':
-      return { ...state, workers: [...state.workers, { id: uuid(), name: action.payload.name, assignments: action.payload.assignments || [], availability: action.payload.availability || {} }] };
+      return { ...state, workers: [...state.workers, {
+        id: uuid(),
+        name: action.payload.name,
+        assignments: action.payload.assignments || [],
+        availability: action.payload.availability || {},
+        ...(action.payload.isGroup ? { isGroup: true, quantity: Math.max(1, action.payload.quantity || 1) } : {}),
+      }] };
     case 'UPDATE_WORKER':
       return { ...state, workers: state.workers.map((w) => w.id === action.payload.id ? { ...w, ...action.payload } : w) };
     case 'DELETE_WORKER':

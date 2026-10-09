@@ -2,6 +2,7 @@ import React, { useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
 import { useLang } from '../i18n/LangContext';
 import './ShiftImage.css';
+import { workerName, sortByName } from '../lib/workers';
 
 export default function ShiftImage({ shift, roles, departments, workers, getDeptLabel, shiftTimes, onClose }) {
   const { t, lang } = useLang();
@@ -9,7 +10,7 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
   const shiftLabel = (s) => s === 'Morning' ? t('morning') : s === 'Afternoon' ? t('afternoon') : s === 'Night' ? t('night') : s === 'Friday' ? t('friday') : s;
   const cardRef = useRef(null);
 
-  const getWorkerName = (id) => workers.find((w) => w.id === id)?.name || '?';
+  const getWorkerName = (id) => workerName(workers, id);
 
   const d = new Date(shift.date + 'T00:00:00');
   const dayKey = DAY_NAMES_KEYS[d.getDay()];
@@ -115,7 +116,7 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
                         <div key={role.id} className="m-role">
                           <div className="m-role-name">{role.name}</div>
                           <div className="m-role-list">
-                            {assigned.map((wid) => {
+                            {sortByName(workers, assigned).map((wid) => {
                               const wt = (shift.workerTimes || {})[`${deptId}::${wid}`];
                               const start = wt ? wt.start : shiftTime.start;
                               const end = wt ? wt.end : shiftTime.end;

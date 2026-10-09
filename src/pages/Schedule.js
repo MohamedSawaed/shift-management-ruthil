@@ -5,6 +5,7 @@ import { useLang } from '../i18n/LangContext';
 import { SHIFT_TYPES, shiftMeta, shiftLabel, countGaps, countAssigned, localDateISO } from '../lib/shiftTypes';
 import { formatShiftText, deptLabel } from '../lib/shiftShare';
 import Avatar from '../components/Avatar';
+import { workerName as nameOf } from '../lib/workers';
 import ShiftDrawer from '../components/ShiftDrawer';
 import ShiftImage from '../components/ShiftImage';
 import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2, Circle, Plus, ArrowRight, CheckCheck } from 'lucide-react';
@@ -78,7 +79,7 @@ export default function Schedule() {
   }, [state.shifts]);
 
   const shiftFor = (date, name) => (byDate[date] || []).find((s) => s.name === name);
-  const workerName = (id) => state.workers.find((w) => w.id === id)?.name || '?';
+  const workerName = (id) => nameOf(state.workers, id);
   const workerIds = (shift) => [...new Set(Object.values(shift.assignments || {}).flatMap((r) => Object.values(r || {}).flat()))];
 
   const weekShifts = dates.flatMap((d) => byDate[d] || []);

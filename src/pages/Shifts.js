@@ -4,6 +4,7 @@ import { useApp, autoAssign, isWorkerAvailable } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
 import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO } from '../lib/shiftTypes';
 import Avatar from '../components/Avatar';
+import { expandWorkers, workerName as nameOf, sortByName } from '../lib/workers';
 import { Zap, Save, AlertTriangle, Undo2, Pencil, Image, Sparkles, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
 import ShiftImage from '../components/ShiftImage';
 
@@ -37,6 +38,8 @@ export default function Shifts() {
   const [workerTimeOverrides, setWorkerTimeOverrides] = useState({}); // { "deptId::workerId": { start, end } }
 
   const roles = useMemo(() => [...state.roles].sort((a, b) => a.priority - b.priority), [state.roles]);
+  // Individual people, with worker groups expanded into their numbered members.
+  const units = useMemo(() => expandWorkers(state.workers), [state.workers]);
   const allDeptsRaw = useMemo(() => [...state.departments].sort((a, b) => a.priority - b.priority), [state.departments]);
   // Only show leaf departments in shifts (no parents that have children)
   const allDepts = useMemo(() => {
@@ -57,7 +60,7 @@ export default function Shifts() {
 
   const getDeptInfo = (dept) => {
     const total = Object.values(dept.requirements || {}).reduce((s, n) => s + n, 0);
-    const workerCount = state.workers.filter((w) => (w.assignments || []).some((a) => a.deptId === dept.id)).length;
+    const workerCount = units.filter((w) => (w.assignments || []).some((a) => a.deptId === dept.id)).length;
     return t('deptPickInfo', { needed: total, workers: workerCount });
   };
 
@@ -111,14 +114,14 @@ export default function Shifts() {
     }
     const relevantDeptIds = new Set([...selectedDepts, ...parentIds]);
 
-    return state.workers.filter((w) => {
+    return units.filter((w) => {
       if (w.onVacation) return false;
       if (busyWorkerIds.has(w.id)) return false;
       if (!isWorkerAvailable(w, date, shiftName)) return false;
       if (selectedDepts.length === 0) return true;
       return (w.assignments || []).some((a) => relevantDeptIds.has(a.deptId));
     });
-  }, [state.workers, state.departments, selectedDepts, date, shiftName, busyWorkerIds]);
+  }, [units, state.departments, selectedDepts, date, shiftName, busyWorkerIds]);
 
   const toggleDept = (id) => { setSelectedDepts((p) => p.includes(id) ? p.filter((d) => d !== id) : [...p, id]); setResult(null); };
   const selectAllDepts = () => { setSelectedDepts(allDepts.map((d) => d.id)); setResult(null); };
@@ -357,7 +360,7 @@ export default function Shifts() {
 
   const generate = () => {
     if (selectedDepts.length === 0 || selectedWorkers.length === 0) return;
-    const res = autoAssign(roles, allDepts.filter((d) => selectedDepts.includes(d.id)), state.workers, selectedWorkers, state.departments);
+    const res = autoAssign(roles, allDepts.filter((d) => selectedDepts.includes(d.id)), units, selectedWorkers, state.departments);
     setResult(res);
     setHistory([]);
     setSelectedSwapWorker(null);
@@ -445,7 +448,7 @@ export default function Shifts() {
 
   // Check if a worker CAN work a specific dept+role (has the assignment & role capability)
   const canWorkerDoSlot = useCallback((workerId, deptId, roleId) => {
-    const worker = state.workers.find((w) => w.id === workerId);
+    const worker = units.find((w) => w.id === workerId);
     if (!worker) return false;
     const assigns = worker.assignments || [];
     // Direct assignment
@@ -458,7 +461,7 @@ export default function Shifts() {
       if (parentAssign && (parentAssign.roleIds || []).includes(roleId)) return true;
     }
     return false;
-  }, [state.workers, state.departments]);
+  }, [units, state.departments]);
 
   // Compute which workers are safe to swap with the selected worker
   // A swap is safe if: after swapping positions, both workers can do their new role
@@ -532,7 +535,7 @@ export default function Shifts() {
     navigate('/', { state: { toast: existingShiftForSlot ? 'updated' : 'saved', date } });
   };
 
-  const getWorkerName = (id) => state.workers.find((w) => w.id === id)?.name || '?';
+  const getWorkerName = (id) => nameOf(state.workers, id);
   const totalGaps = result ? countGaps(result.gaps) : 0;
   const ready = allDepts.length > 0 && state.workers.length > 0;
 
@@ -555,7 +558,7 @@ export default function Shifts() {
     for (const dId of Object.keys(sh.assignments || {})) {
       for (const rId of Object.keys(sh.assignments[dId] || {})) {
         for (const wid of sh.assignments[dId][rId] || []) {
-          if (state.workers.some((w) => w.id === wid)) workerIds.add(wid);
+          if (units.some((w) => w.id === wid)) workerIds.add(wid);
         }
       }
     }
@@ -611,6 +614,18 @@ export default function Shifts() {
       return `${t('summaryCounts', { depts: selectedDepts.length, workers: selectedWorkers.length })}${cov}`;
     }
     return totalGaps > 0 ? t('openCount', { n: totalGaps }) : t('allFilledShort');
+  };
+
+  // Worker groups are picked by count, not one by one: keep the members that
+  // are already chosen, then fill up with the next free ones.
+  const setGroupCount = (groupId, members, count) => {
+    const memberIds = new Set(members.map((m) => m.id));
+    const chosen = members.filter((m) => selectedWorkers.includes(m.id));
+    const order = [...chosen, ...members.filter((m) => !selectedWorkers.includes(m.id))];
+    const n = Math.max(0, Math.min(members.length, count));
+    setSelectedWorkers([...selectedWorkers.filter((id) => !memberIds.has(id)), ...order.slice(0, n).map((m) => m.id)]);
+    setResult(null);
+    setAutoPicked(false);
   };
 
   const renderDeptButton = (d) => {
@@ -807,6 +822,25 @@ export default function Shifts() {
 
                   <div className="worker-pick-grid">
                     {workerAnalysis.workers.map((w) => {
+                      if (w.groupId) {
+                        // One chip per group, shown where its first member would be.
+                        if (workerAnalysis.workers.find((x) => x.groupId === w.groupId) !== w) return null;
+                        const members = workerAnalysis.workers.filter((x) => x.groupId === w.groupId).sort((a, b) => a.unit - b.unit);
+                        const chosen = members.filter((m) => selectedWorkers.includes(m.id)).length;
+                        const group = state.workers.find((g) => g.id === w.groupId);
+                        const groupName = group ? group.name : w.name;
+                        return (
+                          <div key={w.groupId} className={`group-chip ${chosen > 0 ? 'group-chip-on' : ''}`}>
+                            <Avatar name={groupName} size="xs" />
+                            <span className="wc-name">{groupName}</span>
+                            <span className="group-stepper">
+                              <button type="button" onClick={() => setGroupCount(w.groupId, members, chosen - 1)} disabled={chosen === 0} aria-label={`${groupName} −1`}>−</button>
+                              <span className="group-count" aria-live="polite"><strong>{chosen}</strong>/{members.length}</span>
+                              <button type="button" onClick={() => setGroupCount(w.groupId, members, chosen + 1)} disabled={chosen >= members.length} aria-label={`${groupName} +1`}>+</button>
+                            </span>
+                          </div>
+                        );
+                      }
                       const isSelected = selectedWorkers.includes(w.id);
                       const isBestNext = !isSelected && workerAnalysis.bestNextId === w.id;
                       return (
@@ -917,7 +951,7 @@ export default function Shifts() {
                               <span className={`role-assign-count ${gap > 0 ? 'count-gap' : 'count-ok'}`}>{assigned.length}/{needed}</span>
                             </div>
                             <div className="dept-workers">
-                              {assigned.map((wid) => {
+                              {sortByName(state.workers, assigned).map((wid) => {
                                 const isSelected = selectedSwapWorker === wid;
                                 const isSafeSwap = selectedSwapWorker && selectedSwapWorker !== wid && safeSwapWorkerIds.has(wid);
                                 const key = `${dept.id}::${wid}`;

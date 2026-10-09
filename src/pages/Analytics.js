@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
 import Avatar from '../components/Avatar';
+import { baseWorkerId } from '../lib/workers';
 import { shiftMeta } from '../lib/shiftTypes';
 import { CalendarDays, Users, CalendarCheck } from 'lucide-react';
 
@@ -22,7 +23,8 @@ export default function Analytics() {
       const assign = shift.assignments || {};
       for (const deptId of Object.keys(assign)) {
         for (const roleId of Object.keys(assign[deptId])) {
-          for (const wid of (assign[deptId][roleId] || [])) {
+          for (const unitId of (assign[deptId][roleId] || [])) {
+            const wid = baseWorkerId(unitId);
             if (!stats[wid]) continue;
             stats[wid].totalShifts++;
             stats[wid].byRole[roleId] = (stats[wid].byRole[roleId] || 0) + 1;

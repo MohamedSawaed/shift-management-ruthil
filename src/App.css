@@ -4165,6 +4165,141 @@ html[dir="rtl"] .dept-section-title {
   background: var(--surface);
 }
 
+/* ─── Worker groups ──────────────────────────────────────────────── */
+
+.qty-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.qty-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.qty-field .stepper {
+  height: 40px;
+}
+
+.qty-field .stepper-btn,
+.qty-field .stepper-input {
+  height: 38px;
+}
+
+.stepper-sm .stepper-btn,
+.stepper-sm .stepper-input {
+  height: 30px;
+}
+
+.stepper-sm .stepper-btn {
+  width: 28px;
+}
+
+.stepper-sm .stepper-input {
+  width: 40px;
+  font-size: 0.85rem;
+}
+
+.worker-card-group {
+  border-inline-start: 3px solid var(--accent);
+}
+
+.avatar-group {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 12px;
+}
+
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding-inline: 7px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.chip-qty {
+  margin-inline-start: 4px;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+/* Group chip in the shift builder: pick how many, not who */
+.group-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding-inline: 6px 4px;
+  border-radius: var(--r-full);
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--surface);
+  color: var(--text);
+}
+
+.group-chip-on {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.group-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.group-stepper button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+
+.group-stepper button:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.group-stepper button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.group-count {
+  min-width: 42px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.group-count strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+
 /* ─── Responsive ─────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
@@ -4566,6 +4701,10 @@ html[dir="rtl"] .dept-section-title {
   .add-form .btn,
   .sync-input-row .btn {
     width: 100%;
+  }
+
+  .qty-field {
+    justify-content: space-between;
   }
 
   .search-field {

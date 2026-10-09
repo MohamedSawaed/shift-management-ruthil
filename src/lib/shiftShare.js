@@ -1,4 +1,5 @@
 import { countGaps } from './shiftTypes';
+import { workerName as nameOf, sortByName } from './workers';
 
 // "Parent › Child" for sub-departments, plain name otherwise.
 export function deptLabel(dept, departments) {
@@ -17,7 +18,7 @@ export function formatShiftText(shift, { departments, workers, roles }) {
   const dayName = dayNames[d.getDay()];
   const dateStr = shift.date.split('-').reverse().join('/');
   const line = '─'.repeat(20);
-  const workerName = (id) => workers.find((w) => w.id === id)?.name || '?';
+  const workerName = (id) => nameOf(workers, id);
   const sortedRoles = [...roles].sort((a, b) => a.priority - b.priority);
 
   let msg = '';
@@ -43,7 +44,7 @@ export function formatShiftText(shift, { departments, workers, roles }) {
       const assigned = da[role.id] || [];
       const gap = deptGaps[role.id] || 0;
       if (assigned.length === 0 && gap === 0) continue;
-      msg += `   ▸ *${role.name}:* ${assigned.map(workerName).join(', ')}`;
+      msg += `   ▸ *${role.name}:* ${sortByName(workers, assigned).map(workerName).join(', ')}`;
       if (gap > 0) msg += ` ⚠️ _+${gap} needed_`;
       msg += '\n';
     }

@@ -6,6 +6,7 @@ import { Users, Building2, BadgeCheck } from 'lucide-react';
 import Workers from './Workers';
 import Departments from './Departments';
 import Roles from './Roles';
+import { headcount } from '../lib/workers';
 
 const TABS = [
   { id: 'workers', icon: Users, labelKey: 'navWorkers', hintKey: 'workersSubtitle', Component: Workers },
@@ -19,7 +20,7 @@ export default function Team() {
   const { t } = useLang();
   const [params, setParams] = useSearchParams();
 
-  const counts = { workers: state.workers.length, departments: state.departments.length, roles: state.roles.length };
+  const counts = { workers: headcount(state.workers), departments: state.departments.length, roles: state.roles.length };
   // New workspaces start where setup starts: roles → departments → workers.
   const fallback = state.roles.length === 0 ? 'roles' : state.departments.length === 0 ? 'departments' : 'workers';
   const active = TABS.find((tab) => tab.id === params.get('tab')) || TABS.find((tab) => tab.id === fallback);

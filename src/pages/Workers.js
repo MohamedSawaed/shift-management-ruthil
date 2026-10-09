@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
 import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift } from '../lib/shiftTypes';
-import { Plus, Pencil, Check, X, Clock, Palmtree, Search } from 'lucide-react';
+import { Plus, Pencil, Check, X, Clock, Palmtree, Search, Users } from 'lucide-react';
+import { groupSize, headcount } from '../lib/workers';
 import Avatar from '../components/Avatar';
 import ConfirmDelete from '../components/ConfirmDelete';
 
@@ -10,6 +11,7 @@ export default function Workers({ embedded = false }) {
   const { state, dispatch } = useApp();
   const { t } = useLang();
   const [name, setName] = useState('');
+  const [qty, setQty] = useState(1);
   const [editId, setEditId] = useState(null);
   const [editName, setEditName] = useState('');
   const [availId, setAvailId] = useState(null);
@@ -18,8 +20,16 @@ export default function Workers({ embedded = false }) {
   const add = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    dispatch({ type: 'ADD_WORKER', payload: { name: name.trim(), assignments: [], availability: { default: [...SHIFT_TYPES] } } });
+    // More than one → a worker group (e.g. "הודים" × 20) sharing the same
+    // availability, departments and roles.
+    dispatch({ type: 'ADD_WORKER', payload: { name: name.trim(), assignments: [], availability: { default: [...SHIFT_TYPES] }, isGroup: qty > 1, quantity: qty } });
     setName('');
+    setQty(1);
+  };
+
+  const setGroupQty = (worker, n) => {
+    const quantity = Math.max(1, Math.min(999, Math.floor(Number(n) || 1)));
+    dispatch({ type: 'UPDATE_WORKER', payload: { id: worker.id, quantity } });
   };
 
   const startEdit = (w) => { setEditId(w.id); setEditName(w.name); };
@@ -53,7 +63,7 @@ export default function Workers({ embedded = false }) {
           </div>
           {state.workers.length > 0 && (
             <div className="header-stats">
-              <span className="header-stat"><strong>{state.workers.length}</strong> {t('workersCount')}</span>
+              <span className="header-stat"><strong>{headcount(state.workers)}</strong> {t('workersCount')}</span>
               {vacationCount > 0 && <span className="header-stat header-stat-warning"><Palmtree size={13} /> <strong>{vacationCount}</strong> {t('onVacation')}</span>}
             </div>
           )}
@@ -63,7 +73,17 @@ export default function Workers({ embedded = false }) {
       <div className="toolbar">
         <form className="add-form" onSubmit={add}>
           <input type="text" placeholder={t('workerNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} className="input" aria-label={t('workerNamePlaceholder')} />
-          <button type="submit" className="btn btn-primary" disabled={!name.trim()}><Plus size={18} /> {t('addWorker')}</button>
+          <label className="qty-field" title={t('quantityHint')}>
+            <span className="qty-label">{t('quantity')}</span>
+            <span className="stepper">
+              <button type="button" className="stepper-btn" onClick={() => setQty((q) => Math.max(1, q - 1))} disabled={qty <= 1} aria-label="−1">−</button>
+              <input type="number" min="1" max="999" className="stepper-input" value={qty} onChange={(e) => setQty(Math.max(1, Math.min(999, Math.floor(Number(e.target.value) || 1))))} aria-label={t('quantity')} />
+              <button type="button" className="stepper-btn" onClick={() => setQty((q) => Math.min(999, q + 1))} aria-label="+1">+</button>
+            </span>
+          </label>
+          <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
+            {qty > 1 ? <><Users size={18} /> {t('addGroup', { n: qty })}</> : <><Plus size={18} /> {t('addWorker')}</>}
+          </button>
         </form>
         {state.workers.length > 5 && (
           <label className="search-field">
@@ -84,7 +104,7 @@ export default function Workers({ embedded = false }) {
             const defaultAvail = (worker.availability || {}).default || SHIFT_TYPES;
 
             return (
-              <div key={worker.id} className={`card card-vertical worker-card ${worker.onVacation ? 'card-vacation' : ''}`}>
+              <div key={worker.id} className={`card card-vertical worker-card ${worker.isGroup ? 'worker-card-group' : ''} ${worker.onVacation ? 'card-vacation' : ''}`}>
                 {isEditing ? (
                   <div className="card-row">
                     <Avatar name={editName || worker.name} />
@@ -96,10 +116,17 @@ export default function Workers({ embedded = false }) {
                   </div>
                 ) : (
                   <div className="card-row">
-                    <Avatar name={worker.name} />
+                    {worker.isGroup
+                      ? <span className="avatar avatar-group" aria-hidden="true"><Users size={18} /></span>
+                      : <Avatar name={worker.name} />}
                     <div className="card-content card-content-stack">
                       <span className="card-title">
                         {worker.name}
+                        {worker.isGroup && (
+                          <span className="group-badge">
+                            <Users size={11} /> {t('groupOf', { n: groupSize(worker) })}
+                          </span>
+                        )}
                         {worker.onVacation && <span className="vacation-badge"><Palmtree size={11} /> {t('onVacation')}</span>}
                       </span>
                       {assigns.length > 0 ? (
@@ -115,6 +142,13 @@ export default function Workers({ embedded = false }) {
                         <span className="card-meta">{t('notAssigned')}</span>
                       )}
                     </div>
+                    {worker.isGroup && (
+                      <span className="stepper stepper-sm" title={t('quantity')}>
+                        <button type="button" className="stepper-btn" onClick={() => setGroupQty(worker, groupSize(worker) - 1)} disabled={groupSize(worker) <= 1} aria-label={`${worker.name} −1`}>−</button>
+                        <input type="number" min="1" max="999" className="stepper-input" value={groupSize(worker)} onChange={(e) => setGroupQty(worker, e.target.value)} aria-label={`${worker.name} — ${t('quantity')}`} />
+                        <button type="button" className="stepper-btn" onClick={() => setGroupQty(worker, groupSize(worker) + 1)} aria-label={`${worker.name} +1`}>+</button>
+                      </span>
+                    )}
                     <div className="avail-dots" aria-label={t('availableForShifts')}>
                       {SHIFT_TYPES.map((s) => {
                         const meta = shiftMeta(s);

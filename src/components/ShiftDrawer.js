@@ -5,6 +5,7 @@ import { useLang } from '../i18n/LangContext';
 import { shiftMeta, shiftLabel, countGaps, countAssigned } from '../lib/shiftTypes';
 import { deptLabel } from '../lib/shiftShare';
 import Avatar from './Avatar';
+import { workerName as nameOf, sortByName } from '../lib/workers';
 import { X, Pencil, Image, Copy, Trash2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 
 // Side panel (bottom sheet on phones) with everything about one saved shift,
@@ -31,7 +32,7 @@ export default function ShiftDrawer({ shift, onClose, onShare, onCopy, onDelete 
   const depts = [...state.departments].sort((a, b) => a.priority - b.priority);
   const gaps = countGaps(shift.gaps);
   const hours = (state.shiftTimes || {})[shift.name] || {};
-  const workerName = (id) => state.workers.find((w) => w.id === id)?.name || '?';
+  const workerName = (id) => nameOf(state.workers, id);
   const dateLabel = new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${shift.date}T00:00:00`));
 
   return (
@@ -74,7 +75,7 @@ export default function ShiftDrawer({ shift, onClose, onShare, onCopy, onDelete 
                     <div key={role.id} className="drawer-role">
                       <span className="drawer-role-name">{role.name}</span>
                       <div className="drawer-people">
-                        {ids.map((wid) => {
+                        {sortByName(state.workers, ids).map((wid) => {
                           const wt = (shift.workerTimes || {})[`${dept.id}::${wid}`];
                           const custom = wt && (wt.start !== hours.start || wt.end !== hours.end);
                           return (
