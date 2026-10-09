@@ -314,6 +314,10 @@ export const translations = {
 
     // Share image
     shareShift: 'Share shift',
+    shareHintMobile: 'Tap “Send to WhatsApp” and pick the chat — the image is sent as a picture.',
+    shareHintDesktop: '“Send to WhatsApp” copies the image and opens WhatsApp Web — choose a chat and paste (Ctrl+V).',
+    pasteInWhatsApp: 'Image copied. In WhatsApp, open the chat and press Ctrl+V to send it.',
+    moreShareOptions: 'More…',
     sharePreviewHint: 'Preview of the image you’re about to share.',
     shiftScheduleShort: 'Shift schedule',
     siWorkers: 'Working',
@@ -641,6 +645,10 @@ export const translations = {
 
     // Share image
     shareShift: 'שיתוף משמרת',
+    shareHintMobile: 'הקש על "שלח לוואטסאפ" ובחר צ׳אט — התמונה נשלחת כתמונה.',
+    shareHintDesktop: '"שלח לוואטסאפ" מעתיק את התמונה ופותח את וואטסאפ ווב — בחר צ׳אט והדבק (Ctrl+V).',
+    pasteInWhatsApp: 'התמונה הועתקה. בוואטסאפ, פתח את הצ׳אט ולחץ Ctrl+V כדי לשלוח.',
+    moreShareOptions: 'עוד…',
     sharePreviewHint: 'תצוגה מקדימה של התמונה שתשותף.',
     shiftScheduleShort: 'סידור משמרת',
     siWorkers: 'עובדים',

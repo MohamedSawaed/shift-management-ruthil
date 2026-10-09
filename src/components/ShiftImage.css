@@ -1,153 +1,5 @@
-/* Shared shift image (exported as PNG via html2canvas and sent to WhatsApp).
-   Everything inside `.si` uses fixed colors, independent of the app theme, so
-   the image looks the same no matter who generates it or in which theme.
-   Kept to what html2canvas renders faithfully: hex/rgba colors, linear
-   gradients, border-radius, simple shadows — no color-mix, no CSS
-   variables, no filters. */
-
-/* ─── The image ─────────────────────────────────────────────────── */
-
-.si {
-  position: relative;
-  overflow: hidden;
-  width: 440px;
-  max-width: 100%;
-  flex-shrink: 0;
-  padding: 30px 20px 22px;
-  border-radius: 28px;
-  color: #ffffff;
-  font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-align: start;
-}
-
-.si-rtl {
-  font-family: 'Heebo', 'Inter', sans-serif;
-}
-
-/* The whole card wears the shift's color */
-.si-morning { background: linear-gradient(160deg, #ffb31a 0%, #f76707 55%, #d9480f 100%); }
-.si-afternoon { background: linear-gradient(160deg, #ff8f5a 0%, #f03e3e 55%, #b02a5b 100%); }
-.si-night { background: linear-gradient(160deg, #5c7cfa 0%, #3b5bdb 45%, #1c1858 100%); }
-.si-friday { background: linear-gradient(160deg, #f783ac 0%, #d6336c 50%, #7b2a8c 100%); }
-
-.si-orb {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.13);
-  pointer-events: none;
-}
-
-.si-orb-1 {
-  width: 260px;
-  height: 260px;
-  top: -110px;
-  right: -80px;
-}
-
-.si-orb-2 {
-  width: 140px;
-  height: 140px;
-  top: 120px;
-  left: -70px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.si-rtl .si-orb-1 {
-  right: auto;
-  left: -80px;
-}
-
-.si-rtl .si-orb-2 {
-  left: auto;
-  right: -70px;
-}
-
-.si-head {
-  position: relative;
-  padding: 0 6px 24px;
-}
-
-.si-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  margin-bottom: 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.22);
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
-}
-
-.si-title {
-  font-size: 52px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-.si-rtl .si-title {
-  letter-spacing: 0;
-  font-weight: 800;
-}
-
-.si-date {
-  margin-top: 10px;
-  font-size: 19px;
-  font-weight: 700;
-  opacity: 0.92;
-}
-
-.si-body {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.si-dept {
-  padding: 16px 16px 18px;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 10px 24px rgba(15, 12, 50, 0.18);
-}
-
-.si-dept-name {
-  margin-bottom: 12px;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
-.si-rtl .si-dept-name {
-  letter-spacing: 0;
-}
-
-.si-people {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.si-person {
-  display: inline-flex;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 14px;
-  color: #14162b;
-  font-family: 'Inter', -apple-system, sans-serif;
-  font-size: 17px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.si-rtl .si-person {
-  font-family: 'Heebo', 'Inter', sans-serif;
-  font-size: 18px;
-}
+/* Share window for the shift image. The image itself is drawn on a canvas
+   (lib/shiftImageCanvas.js); the preview shows that exact PNG. */
 
 /* ─── Share window (app chrome, follows the theme) ──────────────── */
 
@@ -190,8 +42,28 @@
   overflow-y: auto;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  min-height: 240px;
   padding: 20px;
   background: var(--surface-3);
+}
+
+.si-img {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  border-radius: 18px;
+  box-shadow: 0 18px 40px -12px rgba(10, 12, 27, 0.45);
+}
+
+.si-loading {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-weight: 600;
 }
 
 .si-notice {
@@ -244,9 +116,5 @@
 
   .si-preview {
     padding: 12px;
-  }
-
-  .si-title {
-    font-size: 44px;
   }
 }
