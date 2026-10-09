@@ -3645,7 +3645,6 @@ html[dir="rtl"] .role-assign-name {
 }
 
 .save-actions,
-.shift-image-actions,
 .shift-actions {
   display: flex;
   flex-wrap: wrap;
@@ -4142,28 +4141,6 @@ html[dir="rtl"] .dept-section-title {
   to { opacity: 1; }
 }
 
-.shift-image-modal {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  max-height: 100%;
-  overflow-y: auto;
-  padding: 4px;
-  animation: page-in 0.3s var(--ease);
-}
-
-.shift-image-actions {
-  justify-content: center;
-}
-
-.shift-image-actions .btn-lg {
-  margin: 0;
-}
-
-.shift-image-actions .btn:not(.btn-whatsapp) {
-  background: var(--surface);
-}
 
 /* ─── Worker groups ──────────────────────────────────────────────── */
 
@@ -4795,20 +4772,5 @@ html[dir="rtl"] .dept-section-title {
   .role-requirements,
   .dept-worker-list {
     grid-template-columns: 1fr;
-  }
-
-  .shift-image-overlay {
-    padding: 12px;
-    align-items: flex-start;
-  }
-
-  .shift-image-actions {
-    flex-direction: column;
-    width: 100%;
-    max-width: 380px;
-  }
-
-  .shift-image-actions .btn {
-    width: 100%;
   }
 }

@@ -310,6 +310,20 @@ export const translations = {
     quantityHint: 'More than 1 creates a group (e.g. 20 workers with the same departments, roles and availability)',
     addGroup: 'Add group of {n}',
     groupOf: 'Group · {n}',
+
+    // Share image
+    shareShift: 'Share shift',
+    sharePreviewHint: 'Preview of the image you’re about to share.',
+    shiftScheduleShort: 'Shift schedule',
+    siWorkers: 'Working',
+    siDepts: 'Departments',
+    siOpen: 'Open',
+    copyImage: 'Copy image',
+    imageCopied: 'Image copied — paste it into a WhatsApp chat (Ctrl+V).',
+    copyImageUnsupported: 'This browser can’t copy images — use Download instead.',
+    preparingImage: 'Preparing…',
+    shareFallbackHint: 'Image saved — attach it in the WhatsApp chat that just opened.',
+    shareFailed: 'Couldn’t create the image. Please try again.',
   },
 
   he: {
@@ -622,5 +636,19 @@ export const translations = {
     quantityHint: 'יותר מ-1 יוצר קבוצה (למשל 20 עובדים עם אותן מחלקות, תפקידים וזמינות)',
     addGroup: 'הוסף קבוצה של {n}',
     groupOf: 'קבוצה · {n}',
+
+    // Share image
+    shareShift: 'שיתוף משמרת',
+    sharePreviewHint: 'תצוגה מקדימה של התמונה שתשותף.',
+    shiftScheduleShort: 'סידור משמרת',
+    siWorkers: 'עובדים',
+    siDepts: 'מחלקות',
+    siOpen: 'פתוחות',
+    copyImage: 'העתק תמונה',
+    imageCopied: 'התמונה הועתקה — הדבק אותה בצ׳אט בוואטסאפ (Ctrl+V).',
+    copyImageUnsupported: 'הדפדפן הזה לא תומך בהעתקת תמונות — השתמש בהורדה.',
+    preparingImage: 'מכין…',
+    shareFallbackHint: 'התמונה נשמרה — צרף אותה בצ׳אט הוואטסאפ שנפתח.',
+    shareFailed: 'לא הצלחנו ליצור את התמונה. נסה שוב.',
   },
 };

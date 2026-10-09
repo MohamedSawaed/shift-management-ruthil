@@ -81,7 +81,7 @@ export default function ShiftDrawer({ shift, onClose, onShare, onCopy, onDelete 
                           return (
                             <span key={wid} className="drawer-person">
                               <Avatar name={workerName(wid)} size="xs" />
-                              {workerName(wid)}
+                              <span dir="auto">{workerName(wid)}</span>
                               {custom && <span className="drawer-person-time">{wt.start}–{wt.end}</span>}
                             </span>
                           );

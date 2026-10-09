@@ -832,7 +832,7 @@ export default function Shifts() {
                         return (
                           <div key={w.groupId} className={`group-chip ${chosen > 0 ? 'group-chip-on' : ''}`}>
                             <Avatar name={groupName} size="xs" />
-                            <span className="wc-name">{groupName}</span>
+                            <span className="wc-name" dir="auto">{groupName}</span>
                             <span className="group-stepper">
                               <button type="button" onClick={() => setGroupCount(w.groupId, members, chosen - 1)} disabled={chosen === 0} aria-label={`${groupName} −1`}>−</button>
                               <span className="group-count" aria-live="polite"><strong>{chosen}</strong>/{members.length}</span>
@@ -852,7 +852,7 @@ export default function Shifts() {
                           title={w.isCritical && w.criticalFor.length > 0 ? `${t('onlyOptionFor')}: ${w.criticalFor.join(', ')}` : undefined}
                         >
                           <Avatar name={w.name} size="xs" />
-                          <span className="wc-name">{w.name}</span>
+                          <span className="wc-name" dir="auto">{w.name}</span>
                           {isSelected && <Check size={14} strokeWidth={3} className="wc-check" />}
                           {selectedWorkers.length > 0 && w.impact > 0 && !isSelected && (
                             <span className="wc-impact wc-impact-add">+{w.impact}</span>
@@ -972,7 +972,7 @@ export default function Shifts() {
                                     }}
                                   >
                                     <Avatar name={getWorkerName(wid)} size="xs" />
-                                    <span className="dept-worker-name">{getWorkerName(wid)}</span>
+                                    <span className="dept-worker-name" dir="auto">{getWorkerName(wid)}</span>
                                     {isSelected && <span className="swap-badge">{t('clickGreen')}</span>}
                                     {isSafeSwap && <span className="swap-badge swap-badge-safe">{t('safeSwap')}</span>}
                                     {(start || end) && (
@@ -1002,7 +1002,7 @@ export default function Shifts() {
                     {result.unassigned.map((wid) => (
                       <span key={wid} className="chip chip-static chip-muted chip-draggable" draggable onDragStart={() => handleDragStart(wid)}>
                         <Avatar name={getWorkerName(wid)} size="xs" />
-                        {getWorkerName(wid)}
+                        <span dir="auto">{getWorkerName(wid)}</span>
                       </span>
                     ))}
                   </div>
