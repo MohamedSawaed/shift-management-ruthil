@@ -1,9 +1,9 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import html2canvas from 'html2canvas';
 import { useLang } from '../i18n/LangContext';
-import { shiftMeta, shiftLabel as labelForShift, countGaps } from '../lib/shiftTypes';
+import { shiftMeta, shiftLabel as labelForShift } from '../lib/shiftTypes';
 import { workerName, sortByName } from '../lib/workers';
-import { X, Share2, Copy, Download, Check, Clock, Users, Building2, AlertTriangle, CheckCircle2, CalendarClock, Loader2 } from 'lucide-react';
+import { X, Share2, Copy, Download, Loader2 } from 'lucide-react';
 import './ShiftImage.css';
 
 // The shared image is rendered from this DOM with html2canvas, so it sticks to
@@ -11,33 +11,17 @@ import './ShiftImage.css';
 // the app theme, no color-mix), plain gradients, and icons given an explicit
 // color instead of `currentColor`.
 const TONES = {
-  morning: { accent: '#e8590c', soft: '#fff4e6', line: '#ffd8a8', icon: '#ffffff' },
-  afternoon: { accent: '#e03131', soft: '#fff0eb', line: '#ffc9b9', icon: '#ffffff' },
-  night: { accent: '#3b5bdb', soft: '#edf2ff', line: '#bac8ff', icon: '#ffffff' },
-  friday: { accent: '#c2255c', soft: '#fff0f6', line: '#fcc2d7', icon: '#ffffff' },
+  morning: { accent: '#d9480f', soft: '#fff1e0', base: '#f76707' },
+  afternoon: { accent: '#c92a2a', soft: '#ffece8', base: '#f03e3e' },
+  night: { accent: '#3b5bdb', soft: '#eaefff', base: '#3b5bdb' },
+  friday: { accent: '#a61e4d', soft: '#ffeaf3', base: '#c2255c' },
 };
 
 const TARGET_WIDTH = 1080; // px of the exported PNG — crisp in WhatsApp
 const CARD_WIDTH = 440; // design width of the card, matches .si in ShiftImage.css
 
-function hueFor(name) {
-  // Members of one group ("הודים 1", "הודים 2") share the group's color.
-  const base = name.replace(/\s+\d+$/, '');
-  let h = 0;
-  for (let i = 0; i < base.length; i++) h = (h * 31 + base.charCodeAt(i)) % 360;
-  return h;
-}
 
-function initialsFor(name) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  // Group members ("הודים 3") are told apart by their number.
-  if (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) return parts[parts.length - 1];
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-export default function ShiftImage({ shift, roles, departments, workers, getDeptLabel, shiftTimes, onClose }) {
+export default function ShiftImage({ shift, departments, workers, getDeptLabel, onClose }) {
   const { t, lang } = useLang();
   const cardRef = useRef(null);
   const [busy, setBusy] = useState(null); // 'share' | 'copy' | 'download' | null
@@ -64,32 +48,28 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
   const tone = TONES[meta.tone] || TONES.morning;
   const ShiftIcon = meta.icon;
   const label = labelForShift(t, shift.name);
-  const hours = (shiftTimes || {})[shift.name] || {};
-  const sortedRoles = [...roles].sort((a, b) => a.priority - b.priority);
-
   const dateObj = new Date(`${shift.date}T00:00:00`);
-  const locale = rtl ? 'he-IL' : 'en-GB';
-  const dayName = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(dateObj);
-  const dateLong = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(dateObj);
+  const dayName = new Intl.DateTimeFormat(rtl ? 'he-IL' : 'en-GB', { weekday: 'long' }).format(dateObj);
   const dateShort = shift.date.split('-').reverse().join('/');
 
-  const gaps = countGaps(shift.gaps);
-  const sg = shift.gaps || {};
-  const deptIds = Object.keys(shift.assignments || {}).filter((deptId) => {
-    const da = shift.assignments[deptId] || {};
-    const hasWorkers = Object.values(da).some((arr) => Array.isArray(arr) && arr.length > 0);
-    return hasWorkers || Object.keys(sg[deptId] || {}).length > 0;
-  });
-  // Departments in their configured priority order.
-  const orderedDeptIds = [...deptIds].sort((a, b) => {
-    const pa = departments.find((d) => d.id === a)?.priority ?? 999;
-    const pb = departments.find((d) => d.id === b)?.priority ?? 999;
-    return pa - pb;
-  });
-  const people = new Set(Object.values(shift.assignments || {}).flatMap((r) => Object.values(r || {}).flat()));
+  // Only departments that actually have people, in their configured order,
+  // each with everyone working there (across roles), names in natural order.
+  const deptList = Object.keys(shift.assignments || {})
+    .map((deptId) => {
+      const ids = [...new Set(Object.values(shift.assignments[deptId] || {}).flat())];
+      const deptObj = departments.find((d) => d.id === deptId);
+      return {
+        deptId,
+        priority: deptObj ? deptObj.priority : 999,
+        name: (shift.deptNames && shift.deptNames[deptId]) || (deptObj ? getDeptLabel(deptObj) : deptId),
+        ids: sortByName(workers, ids),
+      };
+    })
+    .filter((d) => d.ids.length > 0)
+    .sort((a, b) => a.priority - b.priority);
 
   const fileName = `shift-${shift.date}-${shift.name}.png`;
-  const caption = `${label} · ${dayName} ${dateShort}${hours.start && hours.end ? ` · ${hours.start}–${hours.end}` : ''}`;
+  const caption = `${label} · ${dayName} ${dateShort}`;
 
   const render = useCallback(async () => {
     const el = cardRef.current;
@@ -99,7 +79,7 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
       // Always export the full-width design (the preview may be narrower on a
       // phone), scaled to exactly TARGET_WIDTH pixels.
       scale: TARGET_WIDTH / CARD_WIDTH,
-      backgroundColor: '#f4f5fa',
+      backgroundColor: tone.base,
       useCORS: true,
       logging: false,
       scrollX: 0,
@@ -116,11 +96,11 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
         unclip('.si-modal');
         unclip('.si-preview');
         const card = doc.querySelector('.si');
-        if (card) Object.assign(card.style, { width: `${CARD_WIDTH}px`, maxWidth: 'none' });
+        if (card) Object.assign(card.style, { width: `${CARD_WIDTH}px`, maxWidth: 'none', borderRadius: '0' });
       },
     });
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
-  }, []);
+  }, [tone.base]);
 
   const download = (blob) => {
     const url = URL.createObjectURL(blob);
@@ -201,112 +181,28 @@ export default function ShiftImage({ shift, roles, departments, workers, getDept
         </header>
 
         <div className="si-preview">
-          {/* ───────── The image ───────── */}
+          {/* ───────── The image: shift, departments, workers ───────── */}
           <div ref={cardRef} className={`si si-${meta.tone} ${rtl ? 'si-rtl' : ''}`} dir={rtl ? 'rtl' : 'ltr'}>
-            <div className="si-hero">
-              <span className="si-orb si-orb-1" />
-              <span className="si-orb si-orb-2" />
-              <div className="si-brand">
-                <span className="si-brand-mark"><CalendarClock size={14} color="#ffffff" strokeWidth={2.4} /></span>
-                <span>{t('appName')}</span>
-              </div>
-              <div className="si-hero-main">
-                <span className="si-icon"><ShiftIcon size={30} color={tone.icon} strokeWidth={2.2} /></span>
-                <div className="si-hero-text">
-                  <span className="si-kicker">{t('shiftScheduleShort')}</span>
-                  <span className="si-title">{label}</span>
-                </div>
-              </div>
-              <div className="si-when">
-                <div className="si-day">{dayName}</div>
-                <div className="si-date">{dateLong}</div>
-                {hours.start && hours.end && (
-                  <div className="si-hours">
-                    <Clock size={14} color="#ffffff" strokeWidth={2.4} />
-                    <span dir="ltr">{hours.start} – {hours.end}</span>
-                  </div>
-                )}
-              </div>
+            <span className="si-orb si-orb-1" />
+            <span className="si-orb si-orb-2" />
+            <div className="si-head">
+              <span className="si-icon"><ShiftIcon size={34} color="#ffffff" strokeWidth={2.4} /></span>
+              <div className="si-title">{label}</div>
+              <div className="si-date">{dayName} · <span dir="ltr">{dateShort}</span></div>
             </div>
-
-            <div className="si-stats">
-              <div className="si-stat">
-                <span className="si-stat-icon" style={{ background: tone.soft }}><Users size={16} color={tone.accent} strokeWidth={2.4} /></span>
-                <span className="si-stat-num">{people.size}</span>
-                <span className="si-stat-label">{t('siWorkers')}</span>
-              </div>
-              <div className="si-stat">
-                <span className="si-stat-icon" style={{ background: tone.soft }}><Building2 size={16} color={tone.accent} strokeWidth={2.4} /></span>
-                <span className="si-stat-num">{orderedDeptIds.length}</span>
-                <span className="si-stat-label">{t('siDepts')}</span>
-              </div>
-              <div className={`si-stat ${gaps > 0 ? 'si-stat-warn' : 'si-stat-ok'}`}>
-                <span className="si-stat-icon">
-                  {gaps > 0 ? <AlertTriangle size={16} color="#b35c00" strokeWidth={2.4} /> : <CheckCircle2 size={16} color="#0b7a52" strokeWidth={2.4} />}
-                </span>
-                <span className="si-stat-num">{gaps > 0 ? gaps : '✓'}</span>
-                <span className="si-stat-label">{gaps > 0 ? t('siOpen') : t('allFilledShort')}</span>
-              </div>
-            </div>
-
             <div className="si-body">
-              {orderedDeptIds.map((deptId) => {
-                const da = shift.assignments[deptId] || {};
-                const dg = sg[deptId] || {};
-                const deptObj = departments.find((dd) => dd.id === deptId);
-                const name = (shift.deptNames && shift.deptNames[deptId]) || (deptObj ? getDeptLabel(deptObj) : deptId);
-                const features = (deptObj && deptObj.features) || [];
-                const deptGap = Object.values(dg).reduce((s, n) => s + (n || 0), 0);
-                return (
-                  <div key={deptId} className="si-dept" style={{ borderColor: deptGap > 0 ? '#ffd8a8' : '#e6e8f0' }}>
-                    <div className="si-dept-head">
-                      <span className="si-dept-bar" style={{ background: deptGap > 0 ? '#f59f00' : tone.accent }} />
-                      <span className="si-dept-name">{name}</span>
-                      {deptGap > 0
-                        ? <span className="si-pill si-pill-warn">+{deptGap} {t('needed')}</span>
-                        : <span className="si-pill si-pill-ok"><Check size={11} color="#0b7a52" strokeWidth={3} /></span>}
-                    </div>
-                    {features.length > 0 && (
-                      <div className="si-tags">
-                        {features.map((f, i) => <span key={i} className="si-tag" style={{ background: tone.soft, color: tone.accent }}>{f}</span>)}
-                      </div>
-                    )}
-                    {sortedRoles.map((role) => {
-                      const ids = da[role.id] || [];
-                      const gap = dg[role.id] || 0;
-                      if (ids.length === 0 && gap === 0) return null;
-                      return (
-                        <div key={role.id} className="si-role">
-                          <div className="si-role-name" style={{ color: tone.accent }}>{role.name}</div>
-                          <div className="si-people">
-                            {sortByName(workers, ids).map((wid) => {
-                              const n = workerName(workers, wid);
-                              const hue = hueFor(n);
-                              const wt = (shift.workerTimes || {})[`${deptId}::${wid}`];
-                              const custom = wt && (wt.start !== hours.start || wt.end !== hours.end) && wt.start && wt.end;
-                              return (
-                                <span key={wid} className="si-person">
-                                  <span className="si-init" style={{ background: `hsl(${hue}, 75%, 92%)`, color: `hsl(${hue}, 55%, 32%)` }}>{initialsFor(n)}</span>
-                                  <span className="si-person-name" dir="auto">{n}</span>
-                                  {custom && <span className="si-person-time" dir="ltr">{wt.start}–{wt.end}</span>}
-                                </span>
-                              );
-                            })}
-                            {gap > 0 && <span className="si-person si-person-gap">+{gap} {t('needed')}</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
+              {deptList.map((d) => (
+                <div key={d.deptId} className="si-dept">
+                  <div className="si-dept-name" style={{ color: tone.accent }} dir="auto">{d.name}</div>
+                  <div className="si-people">
+                    {d.ids.map((wid) => (
+                      <span key={wid} className="si-person" style={{ background: tone.soft }} dir="auto">
+                        {workerName(workers, wid)}
+                      </span>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="si-foot">
-              <span className={gaps > 0 ? 'si-foot-warn' : 'si-foot-ok'}>
-                {gaps > 0 ? `${gaps} ${gaps !== 1 ? t('positionsOpen') : t('positionOpen')}` : t('allFilled')}
-              </span>
-              <span className="si-foot-brand">{t('appName')} · {dateShort}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
