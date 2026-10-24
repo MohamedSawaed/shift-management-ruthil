@@ -3,7 +3,22 @@ import { createClient } from '@supabase/supabase-js';
 const url = process.env.REACT_APP_SUPABASE_URL;
 const anonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
-export const supabase = url && anonKey ? createClient(url, anonKey) : null;
+// A misconfigured URL (e.g. the key pasted into the URL setting) makes
+// createClient throw at startup, which used to blank the whole app. Treat bad
+// settings as "cloud unavailable" instead — the app keeps working locally.
+function makeClient() {
+  if (!url || !anonKey) return null;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('not an http(s) URL');
+    return createClient(url, anonKey);
+  } catch (err) {
+    console.error('Cloud sync disabled — REACT_APP_SUPABASE_URL must look like https://<project>.supabase.co:', err.message);
+    return null;
+  }
+}
+
+export const supabase = makeClient();
 
 export const isCloudEnabled = () => !!supabase;
 
@@ -66,7 +81,7 @@ export async function createWorkspace(syncCode, dataBlob) {
 // expose a way to set that flag, so this talks to the REST endpoint
 // directly for just this one case.
 export function flushPushWorkspace(syncCode, dataBlob) {
-  if (!url || !anonKey || !syncCode) return;
+  if (!supabase || !syncCode) return;
   try {
     fetch(`${url}/rest/v1/workspaces?on_conflict=id`, {
       method: 'POST',
