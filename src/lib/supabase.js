@@ -1,19 +1,54 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.REACT_APP_SUPABASE_URL;
-const anonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+// Read the cloud settings tolerantly. The two Vercel settings are easy to
+// mix up (e.g. the key pasted into REACT_APP_SUPABASE_URL), so:
+//  • whichever value is an http(s) address is the URL;
+//  • the other is the key (preferring a legacy "eyJ…" anon key);
+//  • with no address at all, derive it from the anon key, which records its
+//    project ("ref") → https://<ref>.supabase.co.
+const RAW = [process.env.REACT_APP_SUPABASE_URL, process.env.REACT_APP_SUPABASE_ANON_KEY]
+  .map((v) => (v || '').trim().replace(/^["']|["']$/g, ''))
+  .filter(Boolean);
 
-// A misconfigured URL (e.g. the key pasted into the URL setting) makes
-// createClient throw at startup, which used to blank the whole app. Treat bad
-// settings as "cloud unavailable" instead — the app keeps working locally.
-function makeClient() {
-  if (!url || !anonKey) return null;
+function isHttpUrl(v) {
   try {
-    const u = new URL(url);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('not an http(s) URL');
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function projectRefFromKey(key) {
+  try {
+    const part = key.split('.')[1];
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (part.length % 4)) % 4);
+    const claims = JSON.parse(atob(b64));
+    return claims.role === 'anon' && /^[a-z0-9]+$/.test(claims.ref || '') ? claims.ref : null;
+  } catch {
+    return null;
+  }
+}
+
+const keys = RAW.filter((v) => !isHttpUrl(v));
+const anonKey = keys.find((k) => k.startsWith('eyJ')) || keys[0] || null;
+const url = (RAW.find(isHttpUrl) || '').replace(/\/+$/, '')
+  || (() => {
+    const ref = keys.map(projectRefFromKey).find(Boolean);
+    return ref ? `https://${ref}.supabase.co` : null;
+  })();
+
+// Anything still unusable must not take the app down (it used to render a
+// blank page): treat it as "cloud unavailable" and keep working locally.
+function makeClient() {
+  if (!url || !anonKey) {
+    if (RAW.length) console.error('Cloud sync disabled — check REACT_APP_SUPABASE_URL (https://<project>.supabase.co) and REACT_APP_SUPABASE_ANON_KEY.');
+    return null;
+  }
+  try {
     return createClient(url, anonKey);
   } catch (err) {
-    console.error('Cloud sync disabled — REACT_APP_SUPABASE_URL must look like https://<project>.supabase.co:', err.message);
+    console.error('Cloud sync disabled:', err.message);
     return null;
   }
 }
