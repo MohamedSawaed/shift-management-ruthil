@@ -74,7 +74,9 @@ export function flushPushWorkspace(syncCode, dataBlob) {
       headers: {
         'Content-Type': 'application/json',
         apikey: anonKey,
-        Authorization: `Bearer ${anonKey}`,
+        // Legacy anon keys are JWTs and go in Authorization too; the newer
+        // "sb_publishable_…" keys aren't JWTs and must only be sent as apikey.
+        ...(anonKey.startsWith('eyJ') ? { Authorization: `Bearer ${anonKey}` } : {}),
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify({ id: syncCode, data: dataBlob, updated_at: new Date().toISOString() }),
