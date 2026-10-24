@@ -4,6 +4,7 @@ import { useApp, autoAssign, isWorkerAvailable } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
 import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO, shiftInterval, addDays } from '../lib/shiftTypes';
 import Avatar from '../components/Avatar';
+import WorkerPicker from '../components/WorkerPicker';
 import { expandWorkers, workerName as nameOf, sortByName } from '../lib/workers';
 import { Zap, Save, AlertTriangle, Undo2, Pencil, Image, Sparkles, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
 import ShiftImage from '../components/ShiftImage';
@@ -856,51 +857,15 @@ export default function Shifts() {
                     </div>
                   )}
 
-                  <div className="worker-pick-grid">
-                    {workerAnalysis.workers.map((w) => {
-                      if (w.groupId) {
-                        // One chip per group, shown where its first member would be.
-                        if (workerAnalysis.workers.find((x) => x.groupId === w.groupId) !== w) return null;
-                        const members = workerAnalysis.workers.filter((x) => x.groupId === w.groupId).sort((a, b) => a.unit - b.unit);
-                        const chosen = members.filter((m) => selectedWorkers.includes(m.id)).length;
-                        const group = state.workers.find((g) => g.id === w.groupId);
-                        const groupName = group ? group.name : w.name;
-                        return (
-                          <div key={w.groupId} className={`group-chip ${chosen > 0 ? 'group-chip-on' : ''}`}>
-                            <Avatar name={groupName} size="xs" />
-                            <span className="wc-name" dir="auto">{groupName}</span>
-                            <span className="group-stepper">
-                              <button type="button" onClick={() => setGroupCount(w.groupId, members, chosen - 1)} disabled={chosen === 0} aria-label={`${groupName} −1`}>−</button>
-                              <span className="group-count" aria-live="polite"><strong>{chosen}</strong>/{members.length}</span>
-                              <button type="button" onClick={() => setGroupCount(w.groupId, members, chosen + 1)} disabled={chosen >= members.length} aria-label={`${groupName} +1`}>+</button>
-                            </span>
-                          </div>
-                        );
-                      }
-                      const isSelected = selectedWorkers.includes(w.id);
-                      const isBestNext = !isSelected && workerAnalysis.bestNextId === w.id;
-                      return (
-                        <button
-                          key={w.id}
-                          className={`worker-chip ${isSelected ? 'worker-chip-on' : ''} ${isBestNext ? 'worker-chip-suggested' : ''} ${w.isCritical && !isSelected ? 'worker-chip-critical' : ''}`}
-                          onClick={() => { toggleWorker(w.id); setAutoPicked(false); }}
-                          aria-pressed={isSelected}
-                          title={w.isCritical && w.criticalFor.length > 0 ? `${t('onlyOptionFor')}: ${w.criticalFor.join(', ')}` : undefined}
-                        >
-                          <Avatar name={w.name} size="xs" />
-                          <span className="wc-name" dir="auto">{w.name}</span>
-                          {isSelected && <Check size={14} strokeWidth={3} className="wc-check" />}
-                          {selectedWorkers.length > 0 && w.impact > 0 && !isSelected && (
-                            <span className="wc-impact wc-impact-add">+{w.impact}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="hint wizard-legend">
-                    <span className="legend-dot legend-suggested" /> {t('legendSuggested')}
-                    <span className="legend-dot legend-critical" /> {t('legendCritical')}
-                  </p>
+                  <WorkerPicker
+                    analysis={workerAnalysis}
+                    selected={selectedWorkers}
+                    onToggle={(id) => { toggleWorker(id); setAutoPicked(false); }}
+                    onGroupCount={setGroupCount}
+                    roles={roles}
+                    depts={allDepts.filter((d) => selectedDepts.includes(d.id))}
+                    allWorkers={state.workers}
+                  />
                 </>
               )}
             </section>
