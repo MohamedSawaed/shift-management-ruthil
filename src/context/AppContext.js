@@ -306,6 +306,17 @@ export function AppProvider({ children }) {
     }
   }, [state, setSyncCode]);
 
+  // Cloud backup is on by default: the first time the app runs with the cloud
+  // available and no sync code yet, create one, so every change is saved to
+  // the cloud as well — no trip to Settings needed. (Other devices still join
+  // the same data by entering this code in Settings.)
+  const autoCreateTried = useRef(false);
+  useEffect(() => {
+    if (!isCloudEnabled() || syncCode || autoCreateTried.current) return;
+    autoCreateTried.current = true;
+    createNewSyncCode();
+  }, [syncCode, createNewSyncCode]);
+
   const connectToSyncCode = useCallback(async (code) => {
     if (!isCloudEnabled() || !code) return { ok: false, error: 'no_cloud' };
     try {
