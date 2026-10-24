@@ -67,10 +67,11 @@ In your Vercel project:
 
 ## How users use it
 
-1. First time on any device, go to **Settings → Create new sync code**
-2. App shows the code (e.g. `K7N2-X4P9`) — copy it
-3. On another device, go to **Settings → Have a code already** → paste → Connect
-4. Both devices now sync automatically. Any change on one shows up on the other within a second.
+1. Open the app — a sync code is created automatically on the first visit and every change is saved to the cloud from then on (the top bar shows **Synced**).
+2. To see the same data on another device: on the first device open **Settings** and copy the code (e.g. `K7N2-X4P9`); on the other device go to **Settings → Have a code already** → paste → Connect.
+3. Both devices now sync automatically. Any change on one shows up on the other.
+
+Note: Supabase free projects pause after about a week without use. While paused, the app keeps working and saving locally and shows a red banner; restore the project in the Supabase dashboard and syncing resumes.
 
 ## Security note
 
