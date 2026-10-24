@@ -4,6 +4,16 @@ import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generate
 
 const SYNC_CODE_KEY = 'myshift_sync_code';
 const LAST_MODIFIED_KEY = 'myshift_last_modified';
+// Version stamp (cloud updated_at) of the cloud copy this device's data
+// matches, and whether this device has edits the cloud doesn't have yet.
+// Comparing versions — not clock times — keeps phone↔PC sync right even
+// when the two devices' clocks disagree.
+const SEEN_KEY = 'myshift_cloud_seen';
+const DIRTY_KEY = 'myshift_dirty';
+const PULL_EVERY_MS = 20000;
+
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ignore */ } };
 
 const AppContext = createContext();
 
@@ -197,56 +207,95 @@ export function AppProvider({ children }) {
     if (isFirstPersistRef.current) {
       isFirstPersistRef.current = false;
     } else if (!skipNextSyncRef.current) {
-      try { localStorage.setItem(LAST_MODIFIED_KEY, String(Date.now())); } catch { /* ignore */ }
+      lsSet(LAST_MODIFIED_KEY, String(Date.now()));
+      lsSet(DIRTY_KEY, '1');
     }
   }, [state]);
 
-  // On first load: if cloud enabled and we have a sync code, pull latest —
-  // but never clobber local edits the cloud doesn't have yet. If this device
-  // has unsynced changes (e.g. the last push never made it out before the tab
-  // closed), push them up instead of overwriting them with the older cloud copy.
-  useEffect(() => {
-    if (!isCloudEnabled() || !syncCode) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setSyncStatus('syncing');
-        const remote = await pullWorkspace(syncCode);
-        if (cancelled) return;
-        if (remote && remote.data) {
-          const localModified = Number(localStorage.getItem(LAST_MODIFIED_KEY) || 0);
-          const remoteModified = remote.updated_at ? new Date(remote.updated_at).getTime() : 0;
-          if (localModified && localModified > remoteModified) {
-            await pushWorkspace(syncCode, stateRef.current);
-          } else {
-            skipNextSyncRef.current = true;
-            dispatch({ type: 'REPLACE_STATE', payload: remote.data });
-          }
-          setLastSynced(new Date());
-        }
-        setSyncStatus('idle');
-      } catch (err) {
-        console.error('Pull failed:', err);
-        if (!cancelled) setSyncStatus('error');
+  // Upload this device's data and remember which cloud version it now is.
+  const pushNow = useCallback(async (code) => {
+    const sent = stateRef.current;
+    const updatedAt = await pushWorkspace(code, sent);
+    if (updatedAt) lsSet(SEEN_KEY, updatedAt);
+    // Only clear "dirty" if nothing changed while the upload was in flight.
+    if (stateRef.current === sent) lsSet(DIRTY_KEY, null);
+    setLastSynced(new Date());
+  }, []);
+
+  // Bring this device in line with the cloud:
+  //  • cloud unchanged since we last saw it → just upload any local edits;
+  //  • cloud changed (another device saved) and no local edits → take it;
+  //  • both changed → keep the more recent side (rare: edits on two devices
+  //    between syncs).
+  const pullingRef = useRef(false);
+  const syncWithCloud = useCallback(async ({ quiet = false } = {}) => {
+    if (!isCloudEnabled() || !syncCode || pullingRef.current) return;
+    if (pushTimerRef.current) return; // an upload is about to happen anyway
+    pullingRef.current = true;
+    try {
+      if (!quiet) setSyncStatus('syncing');
+      const remote = await pullWorkspace(syncCode);
+      const seen = lsGet(SEEN_KEY);
+      const localModified = Number(lsGet(LAST_MODIFIED_KEY) || 0);
+      const remoteAt = remote && remote.updated_at ? remote.updated_at : null;
+      const remoteMs = remoteAt ? new Date(remoteAt).getTime() : 0;
+      // Devices updated before version tracking existed: fall back to times.
+      const dirty = lsGet(DIRTY_KEY) === '1' || (!seen && localModified > remoteMs);
+
+      if (!remote || !remote.data) {
+        await pushNow(syncCode);
+      } else if (remoteAt && seen && remoteAt === seen) {
+        if (dirty) await pushNow(syncCode);
+      } else if (!dirty || remoteMs >= localModified) {
+        skipNextSyncRef.current = true;
+        dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+        lsSet(SEEN_KEY, remoteAt);
+        lsSet(DIRTY_KEY, null);
+        setLastSynced(new Date());
+      } else {
+        await pushNow(syncCode);
       }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncCode]);
+      setSyncStatus('idle');
+    } catch (err) {
+      console.error('Sync failed:', err);
+      setSyncStatus('error');
+    } finally {
+      pullingRef.current = false;
+    }
+  }, [syncCode, pushNow]);
+
+  // On load, when coming back to the app, and every few seconds while it's
+  // open: pick up changes saved from other devices (e.g. the phone).
+  useEffect(() => {
+    if (!isCloudEnabled() || !syncCode) return undefined;
+    syncWithCloud();
+    const onVisible = () => { if (document.visibilityState === 'visible') syncWithCloud({ quiet: true }); };
+    const onFocus = () => syncWithCloud({ quiet: true });
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') syncWithCloud({ quiet: true });
+    }, PULL_EVERY_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      clearInterval(id);
+    };
+  }, [syncCode, syncWithCloud]);
 
   // On state change: debounced push to cloud
   useEffect(() => {
-    if (!isCloudEnabled() || !syncCode) return;
+    if (!isCloudEnabled() || !syncCode) return undefined;
     if (skipNextSyncRef.current) {
       skipNextSyncRef.current = false;
-      return;
+      return undefined;
     }
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(async () => {
+      pushTimerRef.current = null;
       try {
         setSyncStatus('syncing');
-        await pushWorkspace(syncCode, state);
-        setLastSynced(new Date());
+        await pushNow(syncCode);
         setSyncStatus('idle');
       } catch (err) {
         console.error('Push failed:', err);
@@ -254,7 +303,7 @@ export function AppProvider({ children }) {
       }
     }, 800);
     return () => { if (pushTimerRef.current) clearTimeout(pushTimerRef.current); };
-  }, [state, syncCode]);
+  }, [state, syncCode, pushNow]);
 
   // Flush any pending push immediately when the tab is being hidden/closed, so a
   // quick refresh or tab-close right after an edit doesn't lose the debounced push.
@@ -264,11 +313,15 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (!isCloudEnabled() || !syncCode) return;
     const flush = () => {
-      if (pushTimerRef.current) {
+      const pending = !!pushTimerRef.current;
+      if (pending) {
         clearTimeout(pushTimerRef.current);
         pushTimerRef.current = null;
       }
-      flushPushWorkspace(syncCode, stateRef.current);
+      // Only when there's something the cloud doesn't have yet.
+      if (!pending && lsGet(DIRTY_KEY) !== '1') return;
+      const updatedAt = flushPushWorkspace(syncCode, stateRef.current);
+      if (updatedAt) lsSet(SEEN_KEY, updatedAt);
     };
     const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
     window.addEventListener('pagehide', flush);
@@ -294,7 +347,9 @@ export function AppProvider({ children }) {
     const code = generateSyncCode();
     try {
       setSyncStatus('syncing');
-      await createWorkspace(code, state);
+      const updatedAt = await createWorkspace(code, state);
+      lsSet(SEEN_KEY, updatedAt);
+      lsSet(DIRTY_KEY, null);
       setSyncCode(code);
       setLastSynced(new Date());
       setSyncStatus('idle');
@@ -328,6 +383,8 @@ export function AppProvider({ children }) {
       }
       skipNextSyncRef.current = true;
       dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+      lsSet(SEEN_KEY, remote.updated_at || null);
+      lsSet(DIRTY_KEY, null);
       setSyncCode(code);
       setLastSynced(new Date());
       setSyncStatus('idle');

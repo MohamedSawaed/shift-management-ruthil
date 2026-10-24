@@ -210,6 +210,29 @@ export default function Settings() {
               </ol>
             </div>
 
+            {/* Every device gets its own code automatically, so linking must
+                stay possible after that: entering another device's code shows
+                its data here and syncs both from then on. */}
+            <form className="sync-connect sync-link" onSubmit={handleConnect}>
+              <label className="label" htmlFor="sync-link-input">{t('linkOtherDevice')}</label>
+              <p className="panel-intro">{t('linkOtherDeviceHint')}</p>
+              <div className="sync-input-row">
+                <input
+                  id="sync-link-input"
+                  type="text"
+                  className="input sync-code-input"
+                  placeholder="ABCD-EFGH"
+                  value={inputCode}
+                  onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                  maxLength={9}
+                />
+                <button type="submit" className="btn btn-primary" disabled={!inputCode.trim() || connecting}>
+                  <Smartphone size={16} /> {connecting ? t('connecting') : t('connect')}
+                </button>
+              </div>
+              {connectError && <div className="hint hint-danger">{connectError}</div>}
+            </form>
+
             {!confirmDisconnect ? (
               <button className="btn btn-sm btn-danger" onClick={() => setConfirmDisconnect(true)}>
                 <LogOut size={14} /> {t('disconnect')}

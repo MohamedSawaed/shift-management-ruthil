@@ -4810,3 +4810,15 @@ html[dir="rtl"] .dept-section-title {
     grid-template-columns: 1fr;
   }
 }
+
+.sync-link {
+  margin: 4px 0 18px;
+  padding: 16px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.sync-link .panel-intro {
+  margin: 0 0 12px;
+}

@@ -56,20 +56,26 @@ export async function pullWorkspace(syncCode) {
   return data;
 }
 
+// Returns the version stamp (updated_at) it saved, so the device can tell
+// later whether the cloud copy has changed since.
 export async function pushWorkspace(syncCode, dataBlob) {
-  if (!supabase || !syncCode) return;
+  if (!supabase || !syncCode) return null;
+  const updatedAt = new Date().toISOString();
   const { error } = await supabase
     .from('workspaces')
-    .upsert({ id: syncCode, data: dataBlob, updated_at: new Date().toISOString() });
+    .upsert({ id: syncCode, data: dataBlob, updated_at: updatedAt });
   if (error) throw error;
+  return updatedAt;
 }
 
 export async function createWorkspace(syncCode, dataBlob) {
-  if (!supabase || !syncCode) return;
+  if (!supabase || !syncCode) return null;
+  const updatedAt = new Date().toISOString();
   const { error } = await supabase
     .from('workspaces')
-    .insert({ id: syncCode, data: dataBlob });
+    .insert({ id: syncCode, data: dataBlob, updated_at: updatedAt });
   if (error) throw error;
+  return updatedAt;
 }
 
 // A plain `fetch` kicked off from a pagehide/visibilitychange handler is not
@@ -81,7 +87,8 @@ export async function createWorkspace(syncCode, dataBlob) {
 // expose a way to set that flag, so this talks to the REST endpoint
 // directly for just this one case.
 export function flushPushWorkspace(syncCode, dataBlob) {
-  if (!supabase || !syncCode) return;
+  if (!supabase || !syncCode) return null;
+  const updatedAt = new Date().toISOString();
   try {
     fetch(`${url}/rest/v1/workspaces?on_conflict=id`, {
       method: 'POST',
@@ -94,9 +101,10 @@ export function flushPushWorkspace(syncCode, dataBlob) {
         ...(anonKey.startsWith('eyJ') ? { Authorization: `Bearer ${anonKey}` } : {}),
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify({ id: syncCode, data: dataBlob, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ id: syncCode, data: dataBlob, updated_at: updatedAt }),
     }).catch(() => { /* best-effort; next sync will catch up */ });
   } catch {
     // ignore — this is a best-effort safety net, not the primary sync path
   }
+  return updatedAt;
 }
