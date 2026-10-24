@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
 import { useTheme } from '../lib/theme';
 import { SHIFT_TYPES, shiftMeta, shiftLabel } from '../lib/shiftTypes';
-import { normalizeSyncCode } from '../lib/supabase';
-import { Cloud, CloudOff, Copy, Check, AlertTriangle, Smartphone, Plus, LogOut, Clock, Palette, Monitor, Sun, Moon } from 'lucide-react';
+import { Cloud, CloudOff, AlertTriangle, Clock, Palette, Monitor, Sun, Moon } from 'lucide-react';
 
 // "9h 40m" between two HH:MM times, wrapping past midnight for night shifts.
 function duration(start, end) {
@@ -21,44 +20,11 @@ function duration(start, end) {
 export default function Settings() {
   const { t, lang, setLang } = useLang();
   const { preference, setPreference } = useTheme();
-  const { state, dispatch, syncCode, syncStatus, lastSynced, createNewSyncCode, connectToSyncCode, disconnectSync, cloudEnabled } = useApp();
-  const [inputCode, setInputCode] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [connectError, setConnectError] = useState('');
-  const [connecting, setConnecting] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const { state, dispatch, syncStatus, lastSynced, cloudEnabled } = useApp();
   const shiftTimes = state.shiftTimes || {};
 
   const updateTime = (shiftType, field, value) => {
     dispatch({ type: 'UPDATE_SHIFT_TIMES', payload: { [shiftType]: { ...(shiftTimes[shiftType] || {}), [field]: value } } });
-  };
-
-  const handleCopy = () => {
-    if (!syncCode) return;
-    navigator.clipboard.writeText(syncCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleCreate = async () => {
-    setCreating(true);
-    await createNewSyncCode();
-    setCreating(false);
-  };
-
-  const handleConnect = async (e) => {
-    e.preventDefault();
-    setConnectError('');
-    setConnecting(true);
-    const normalized = normalizeSyncCode(inputCode);
-    const result = await connectToSyncCode(normalized);
-    setConnecting(false);
-    if (result.ok) {
-      setInputCode('');
-    } else {
-      setConnectError(result.error === 'not_found' ? t('syncNotFound') : t('syncNetworkError'));
-    }
   };
 
   const formatTime = (date) => {
@@ -135,62 +101,14 @@ export default function Settings() {
         <div className="panel-head">
           <h2>
             {cloudEnabled
-              ? (syncCode ? <><Cloud size={18} /> {t('cloudSyncActive')}</> : <><CloudOff size={18} /> {t('cloudSyncOff')}</>)
+              ? <><Cloud size={18} /> {t('liveSyncOn')}</>
               : <><CloudOff size={18} /> {t('cloudSyncUnavailable')}</>}
           </h2>
         </div>
 
-        {!cloudEnabled && (
-          <div className="alert alert-warning">
-            <AlertTriangle size={16} />
-            <span>{t('cloudNotConfigured')}</span>
-          </div>
-        )}
-
-        {cloudEnabled && !syncCode && (
-          <div className="sync-empty">
-            <p className="panel-intro">{t('syncIntro')}</p>
-            <div className="sync-actions">
-              <button className="btn btn-primary" onClick={handleCreate} disabled={creating}>
-                <Plus size={18} /> {creating ? t('creating') : t('createSyncCode')}
-              </button>
-            </div>
-
-            <div className="sync-divider"><span>{t('or')}</span></div>
-
-            <form className="sync-connect" onSubmit={handleConnect}>
-              <label className="label" htmlFor="sync-code-input">{t('haveCodeAlready')}</label>
-              <div className="sync-input-row">
-                <input
-                  id="sync-code-input"
-                  type="text"
-                  className="input sync-code-input"
-                  placeholder="ABCD-EFGH"
-                  value={inputCode}
-                  onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                  maxLength={9}
-                />
-                <button type="submit" className="btn btn-primary" disabled={!inputCode.trim() || connecting}>
-                  <Smartphone size={16} /> {connecting ? t('connecting') : t('connect')}
-                </button>
-              </div>
-              {connectError && <div className="hint hint-danger">{connectError}</div>}
-            </form>
-          </div>
-        )}
-
-        {cloudEnabled && syncCode && (
+        {cloudEnabled ? (
           <>
-            <div className="sync-code-display">
-              <div>
-                <div className="sync-code-label">{t('yourSyncCode')}</div>
-                <div className="sync-code-value">{syncCode}</div>
-              </div>
-              <button className="btn btn-sm" onClick={handleCopy}>
-                {copied ? <><Check size={14} /> {t('copied')}</> : <><Copy size={14} /> {t('copy')}</>}
-              </button>
-            </div>
-
+            <p className="panel-intro">{t('liveSyncIntro')}</p>
             <div className="sync-status-row">
               <span className={`sync-dot sync-dot-${syncStatus}`} />
               <span className="sync-status-text">
@@ -200,57 +118,12 @@ export default function Settings() {
                 {syncStatus === 'error' && t('syncErrorMsg')}
               </span>
             </div>
-
-            <div className="sync-instructions">
-              <h4>{t('howToSync')}</h4>
-              <ol>
-                <li>{t('syncStep1')}</li>
-                <li>{t('syncStep2')}</li>
-                <li>{t('syncStep3')}</li>
-              </ol>
-            </div>
-
-            {/* Every device gets its own code automatically, so linking must
-                stay possible after that: entering another device's code shows
-                its data here and syncs both from then on. */}
-            <form className="sync-connect sync-link" onSubmit={handleConnect}>
-              <label className="label" htmlFor="sync-link-input">{t('linkOtherDevice')}</label>
-              <p className="panel-intro">{t('linkOtherDeviceHint')}</p>
-              <div className="sync-input-row">
-                <input
-                  id="sync-link-input"
-                  type="text"
-                  className="input sync-code-input"
-                  placeholder="ABCD-EFGH"
-                  value={inputCode}
-                  onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                  maxLength={9}
-                />
-                <button type="submit" className="btn btn-primary" disabled={!inputCode.trim() || connecting}>
-                  <Smartphone size={16} /> {connecting ? t('connecting') : t('connect')}
-                </button>
-              </div>
-              {connectError && <div className="hint hint-danger">{connectError}</div>}
-            </form>
-
-            {!confirmDisconnect ? (
-              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDisconnect(true)}>
-                <LogOut size={14} /> {t('disconnect')}
-              </button>
-            ) : (
-              <div className="alert alert-warning">
-                <span>{t('disconnectWarn')}</span>
-                <div className="alert-actions">
-                  <button className="btn btn-sm btn-danger" onClick={() => { disconnectSync(); setConfirmDisconnect(false); }}>
-                    {t('yes')}
-                  </button>
-                  <button className="btn btn-sm" onClick={() => setConfirmDisconnect(false)}>
-                    {t('no')}
-                  </button>
-                </div>
-              </div>
-            )}
           </>
+        ) : (
+          <div className="alert alert-warning">
+            <AlertTriangle size={16} />
+            <span>{t('cloudNotConfigured')}</span>
+          </div>
         )}
       </section>
     </div>

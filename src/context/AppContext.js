@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useReducer, useEffect, useState, useRef, useCallback } from 'react';
 import { v4 as uuid } from 'uuid';
-import { isCloudEnabled, pullWorkspace, pushWorkspace, createWorkspace, generateSyncCode, flushPushWorkspace } from '../lib/supabase';
+import { isCloudEnabled, pullWorkspace, pushWorkspace, flushPushWorkspace } from '../lib/supabase';
 
-const SYNC_CODE_KEY = 'myshift_sync_code';
+// Every device works on ONE shared copy in the cloud — open the app on any
+// phone or computer and it's the same data, live, with no codes to enter.
+const SHARED_ID = 'shared-main';
+// Set once a device has merged its own data into the shared copy.
+const JOINED_KEY = 'myshift_joined';
 const LAST_MODIFIED_KEY = 'myshift_last_modified';
 // Version stamp (cloud updated_at) of the cloud copy this device's data
 // matches, and whether this device has edits the cloud doesn't have yet.
@@ -13,6 +17,31 @@ const DIRTY_KEY = 'myshift_dirty';
 const PULL_EVERY_MS = 20000;
 
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+
+// Combine two copies of the data without losing anything: everything from
+// both, by id; where both have the same item (or a shift for the same date
+// and type), this device's version wins.
+function mergeData(local, remote) {
+  const byId = (mine = [], theirs = []) => {
+    const m = new Map();
+    for (const x of theirs) if (x && x.id) m.set(x.id, x);
+    for (const x of mine) if (x && x.id) m.set(x.id, x);
+    return [...m.values()];
+  };
+  const shifts = new Map();
+  for (const sh of [...(remote.shifts || []), ...(local.shifts || [])]) {
+    if (sh && sh.date && sh.name) shifts.set(`${sh.date}|${sh.name}`, sh);
+  }
+  return {
+    ...remote,
+    ...local,
+    roles: byId(local.roles, remote.roles),
+    departments: byId(local.departments, remote.departments),
+    workers: byId(local.workers, remote.workers),
+    shifts: [...shifts.values()],
+    shiftTimes: { ...(remote.shiftTimes || {}), ...(local.shiftTimes || {}) },
+  };
+}
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ignore */ } };
 
 const AppContext = createContext();
@@ -176,9 +205,7 @@ function reducer(state, action) {
 
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, loadState() || defaultState);
-  const [syncCode, setSyncCodeState] = useState(() => {
-    try { return localStorage.getItem(SYNC_CODE_KEY) || null; } catch { return null; }
-  });
+  const syncCode = isCloudEnabled() ? SHARED_ID : null;
   const [syncStatus, setSyncStatus] = useState('idle'); // idle | syncing | error | offline
   const [lastSynced, setLastSynced] = useState(null);
   const skipNextSyncRef = useRef(false);
@@ -242,7 +269,20 @@ export function AppProvider({ children }) {
       // Devices updated before version tracking existed: fall back to times.
       const dirty = lsGet(DIRTY_KEY) === '1' || (!seen && localModified > remoteMs);
 
-      if (!remote || !remote.data) {
+      if (lsGet(JOINED_KEY) !== SHARED_ID) {
+        // First time this device joins the shared copy: combine what it has
+        // with what's already in the cloud, so nobody's entries get lost.
+        const merged = remote && remote.data ? mergeData(stateRef.current, remote.data) : stateRef.current;
+        const updatedAt = await pushWorkspace(syncCode, merged);
+        if (remote && remote.data) {
+          skipNextSyncRef.current = true;
+          dispatch({ type: 'REPLACE_STATE', payload: merged });
+        }
+        lsSet(SEEN_KEY, updatedAt);
+        lsSet(DIRTY_KEY, null);
+        lsSet(JOINED_KEY, SHARED_ID);
+        setLastSynced(new Date());
+      } else if (!remote || !remote.data) {
         await pushNow(syncCode);
       } else if (remoteAt && seen && remoteAt === seen) {
         if (dirty) await pushNow(syncCode);
@@ -302,7 +342,13 @@ export function AppProvider({ children }) {
         setSyncStatus('error');
       }
     }, 800);
-    return () => { if (pushTimerRef.current) clearTimeout(pushTimerRef.current); };
+    return () => {
+      // Clear the marker too: a stale id here looked like "an upload is about
+      // to happen" forever, and the device stopped picking up other devices'
+      // changes (syncWithCloud skips while an upload is pending).
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = null;
+    };
   }, [state, syncCode, pushNow]);
 
   // Flush any pending push immediately when the tab is being hidden/closed, so a
@@ -332,79 +378,10 @@ export function AppProvider({ children }) {
     };
   }, [syncCode]);
 
-  // ─── Sync controls ───
-  const setSyncCode = useCallback((code) => {
-    if (code) {
-      localStorage.setItem(SYNC_CODE_KEY, code);
-    } else {
-      localStorage.removeItem(SYNC_CODE_KEY);
-    }
-    setSyncCodeState(code);
-  }, []);
-
-  const createNewSyncCode = useCallback(async () => {
-    if (!isCloudEnabled()) return null;
-    const code = generateSyncCode();
-    try {
-      setSyncStatus('syncing');
-      const updatedAt = await createWorkspace(code, state);
-      lsSet(SEEN_KEY, updatedAt);
-      lsSet(DIRTY_KEY, null);
-      setSyncCode(code);
-      setLastSynced(new Date());
-      setSyncStatus('idle');
-      return code;
-    } catch (err) {
-      console.error('Create failed:', err);
-      setSyncStatus('error');
-      return null;
-    }
-  }, [state, setSyncCode]);
-
-  // Cloud backup is on by default: the first time the app runs with the cloud
-  // available and no sync code yet, create one, so every change is saved to
-  // the cloud as well — no trip to Settings needed. (Other devices still join
-  // the same data by entering this code in Settings.)
-  const autoCreateTried = useRef(false);
-  useEffect(() => {
-    if (!isCloudEnabled() || syncCode || autoCreateTried.current) return;
-    autoCreateTried.current = true;
-    createNewSyncCode();
-  }, [syncCode, createNewSyncCode]);
-
-  const connectToSyncCode = useCallback(async (code) => {
-    if (!isCloudEnabled() || !code) return { ok: false, error: 'no_cloud' };
-    try {
-      setSyncStatus('syncing');
-      const remote = await pullWorkspace(code);
-      if (!remote) {
-        setSyncStatus('idle');
-        return { ok: false, error: 'not_found' };
-      }
-      skipNextSyncRef.current = true;
-      dispatch({ type: 'REPLACE_STATE', payload: remote.data });
-      lsSet(SEEN_KEY, remote.updated_at || null);
-      lsSet(DIRTY_KEY, null);
-      setSyncCode(code);
-      setLastSynced(new Date());
-      setSyncStatus('idle');
-      return { ok: true };
-    } catch (err) {
-      console.error('Connect failed:', err);
-      setSyncStatus('error');
-      return { ok: false, error: 'network' };
-    }
-  }, [setSyncCode]);
-
-  const disconnectSync = useCallback(() => {
-    setSyncCode(null);
-  }, [setSyncCode]);
-
   return (
     <AppContext.Provider value={{
       state, dispatch,
-      syncCode, syncStatus, lastSynced,
-      createNewSyncCode, connectToSyncCode, disconnectSync,
+      syncStatus, lastSynced,
       cloudEnabled: isCloudEnabled(),
     }}>
       {children}

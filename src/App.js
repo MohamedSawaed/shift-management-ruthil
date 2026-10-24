@@ -29,13 +29,14 @@ function Brand() {
   );
 }
 
+// Live-sync status, always visible: "Synced" when every device shares the
+// same data, "This device only" when the cloud isn't reachable/configured.
 function SyncPill() {
-  const { cloudEnabled, syncCode, syncStatus } = useApp();
+  const { cloudEnabled, syncStatus } = useApp();
   const { t } = useLang();
-  if (!cloudEnabled) return null;
   let tone = 'off';
   let label = t('localOnly');
-  if (syncCode) {
+  if (cloudEnabled) {
     if (syncStatus === 'error') { tone = 'error'; label = t('syncIssue'); }
     else if (syncStatus === 'syncing') { tone = 'syncing'; label = t('syncing'); }
     else { tone = 'ok'; label = t('synced'); }
@@ -53,9 +54,9 @@ function SyncPill() {
 // it everywhere so it's obvious something needs attention, while making clear
 // that local data on this device is unaffected.
 function SyncErrorBanner() {
-  const { cloudEnabled, syncCode, syncStatus } = useApp();
+  const { cloudEnabled, syncStatus } = useApp();
   const { t } = useLang();
-  if (!cloudEnabled || !syncCode || syncStatus !== 'error') return null;
+  if (!cloudEnabled || syncStatus !== 'error') return null;
   return (
     <div className="sync-error-banner" role="status">
       <AlertTriangle size={16} />
