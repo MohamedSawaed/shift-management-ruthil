@@ -16,25 +16,30 @@ const SEEN_KEY = 'myshift_cloud_seen';
 const DIRTY_KEY = 'myshift_dirty';
 const PULL_EVERY_MS = 20000;
 
+const sameVersion = (a, b) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();
+
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 
 // Combine two copies of the data without losing anything: everything from
 // both, by id; where both have the same item (or a shift for the same date
 // and type), this device's version wins.
 function mergeData(local, remote) {
+  const deletedIds = [...new Set([...(remote.deletedIds || []), ...(local.deletedIds || [])])];
+  const gone = new Set(deletedIds);
   const byId = (mine = [], theirs = []) => {
     const m = new Map();
     for (const x of theirs) if (x && x.id) m.set(x.id, x);
     for (const x of mine) if (x && x.id) m.set(x.id, x);
-    return [...m.values()];
+    return [...m.values()].filter((x) => !gone.has(x.id));
   };
   const shifts = new Map();
   for (const sh of [...(remote.shifts || []), ...(local.shifts || [])]) {
-    if (sh && sh.date && sh.name) shifts.set(`${sh.date}|${sh.name}`, sh);
+    if (sh && sh.date && sh.name && !gone.has(sh.id)) shifts.set(`${sh.date}|${sh.name}`, sh);
   }
   return {
     ...remote,
     ...local,
+    deletedIds,
     roles: byId(local.roles, remote.roles),
     departments: byId(local.departments, remote.departments),
     workers: byId(local.workers, remote.workers),
@@ -59,6 +64,7 @@ const defaultState = {
   departments: [],
   workers: [],
   shifts: [],
+  deletedIds: [],
   shiftTimes: {
     Morning: { start: '06:50', end: '16:30' },
     Afternoon: { start: '15:30', end: '00:30' },
@@ -88,6 +94,7 @@ function normalizeParsed(parsed) {
     })),
     shifts: Array.isArray(parsed.shifts) ? parsed.shifts : [],
     shiftTimes: { ...defaultState.shiftTimes, ...(parsed.shiftTimes || {}) },
+    deletedIds: Array.isArray(parsed.deletedIds) ? parsed.deletedIds : [],
   };
 }
 
@@ -144,6 +151,7 @@ function reducer(state, action) {
       const roleId = action.payload;
       return {
         ...state,
+        deletedIds: [...(state.deletedIds || []), roleId],
         roles: state.roles.filter((r) => r.id !== roleId),
         departments: state.departments.map((d) => { const reqs = { ...(d.requirements || {}) }; delete reqs[roleId]; return { ...d, requirements: reqs }; }),
         workers: state.workers.map((w) => ({ ...w, assignments: (w.assignments || []).map((a) => ({ ...a, roleIds: (a.roleIds || []).filter((rid) => rid !== roleId) })) })),
@@ -188,6 +196,7 @@ function reducer(state, action) {
       const allRemoved = new Set([deptId, ...childIds]);
       return {
         ...state,
+        deletedIds: [...(state.deletedIds || []), ...allRemoved],
         departments: state.departments.filter((d) => !allRemoved.has(d.id)),
         workers: state.workers.map((w) => ({ ...w, assignments: (w.assignments || []).filter((a) => !allRemoved.has(a.deptId)) })),
       };
@@ -206,7 +215,7 @@ function reducer(state, action) {
     case 'UPDATE_WORKER':
       return { ...state, workers: state.workers.map((w) => w.id === action.payload.id ? { ...w, ...action.payload } : w) };
     case 'DELETE_WORKER':
-      return { ...state, workers: state.workers.filter((w) => w.id !== action.payload) };
+      return { ...state, deletedIds: [...(state.deletedIds || []), action.payload], workers: state.workers.filter((w) => w.id !== action.payload) };
 
     case 'UPDATE_SHIFT_TIMES':
       return { ...state, shiftTimes: { ...(state.shiftTimes || {}), ...action.payload } };
@@ -216,7 +225,7 @@ function reducer(state, action) {
     case 'UPDATE_SHIFT':
       return { ...state, shifts: state.shifts.map((s) => s.id === action.payload.id ? { ...s, ...action.payload } : s) };
     case 'DELETE_SHIFT':
-      return { ...state, shifts: state.shifts.filter((s) => s.id !== action.payload) };
+      return { ...state, deletedIds: [...(state.deletedIds || []), action.payload], shifts: state.shifts.filter((s) => s.id !== action.payload) };
 
     default:
       return state;
@@ -264,7 +273,7 @@ export function AppProvider({ children }) {
     let sent = stateRef.current;
     const remote = await pullWorkspace(code);
     const seen = lsGet(SEEN_KEY);
-    if (remote && hasContent(remote.data) && remote.updated_at !== seen) {
+    if (remote && hasContent(remote.data) && !sameVersion(remote.updated_at, seen)) {
       sent = mergeData(sent, remote.data);
       skipNextSyncRef.current = true;
       dispatch({ type: 'REPLACE_STATE', payload: sent });
@@ -316,7 +325,7 @@ export function AppProvider({ children }) {
       } else if (!remote || !hasContent(remote.data)) {
         // Cloud is empty: fill it from this device (never take an empty copy).
         if (hasContent(stateRef.current)) await pushNow(syncCode);
-      } else if (remoteAt && seen && remoteAt === seen) {
+      } else if (sameVersion(remoteAt, seen)) {
         if (dirty) await pushNow(syncCode);
       } else if (dirty) {
         // Both this device and another changed: combine them.
