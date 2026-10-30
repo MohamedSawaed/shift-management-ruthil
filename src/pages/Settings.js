@@ -6,7 +6,7 @@ import { SHIFT_TYPES, shiftMeta, shiftLabel } from '../lib/shiftTypes';
 import { Cloud, CloudOff, AlertTriangle, Clock, Palette, Monitor, Sun, Moon } from 'lucide-react';
 
 // "9h 40m" between two HH:MM times, wrapping past midnight for night shifts.
-function duration(start, end) {
+function duration(start, end, he) {
   if (!start || !end) return '';
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
@@ -14,6 +14,7 @@ function duration(start, end) {
   if (mins <= 0) mins += 24 * 60;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
+  if (he) return m ? `${h} ש׳ ${m} ד׳` : `${h} שעות`;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
@@ -67,7 +68,7 @@ export default function Settings() {
                   <span className="hours-sep">–</span>
                   <input type="time" className="input input-time" aria-label={`${shiftLabel(t, st)} end`} value={tt.end || ''} onChange={(e) => updateTime(st, 'end', e.target.value)} />
                 </div>
-                <span className="hours-duration">{duration(tt.start, tt.end)}</span>
+                <span className="hours-duration">{duration(tt.start, tt.end, lang === 'he')}</span>
               </div>
             );
           })}

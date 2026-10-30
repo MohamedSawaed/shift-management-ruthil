@@ -637,7 +637,7 @@ export default function Shifts() {
   const goBack = () => (step === 1 ? navigate('/') : goTo(step - 1));
 
   const barInfo = () => {
-    if (step === 1) return hours.start && hours.end ? `${shiftLabel(shiftName)} · ${hours.start}–${hours.end}` : shiftLabel(shiftName);
+    if (step === 1) return hours.start && hours.end ? `${shiftLabel(shiftName)} · ⁦${hours.start}–${hours.end}⁩` : shiftLabel(shiftName);
     if (step === 2) return t('deptsSelected', { n: selectedDepts.length });
     if (step === 3) {
       const cov = workerAnalysis.totalSlots > 0 && selectedWorkers.length > 0 ? ` · ${workerAnalysis.coverage}%` : '';

@@ -643,7 +643,7 @@ export const translations = {
     weekSummary: '{shifts} משמרות השבוע',
 
     // Interface v3 — schedule-first + guided builder
-    navSchedule: 'לוח משמרות',
+    navSchedule: 'משמרות',
     navTeam: 'צוות',
     navInsights: 'תובנות',
     newShiftShort: 'חדשה',

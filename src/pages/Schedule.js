@@ -53,6 +53,7 @@ export default function Schedule() {
   const [shareShift, setShareShift] = useState(null);
   const [shareDate, setShareDate] = useState(null); // share all of a day's shifts in one image
   const [toast, setToast] = useState(() => (location.state && location.state.toast) || null);
+  const [selDate, setSelDate] = useState(null); // phone: the day shown in detail
 
   // Show the "saved" toast once, then drop it from history so a refresh doesn't repeat it.
   useEffect(() => {
@@ -72,6 +73,12 @@ export default function Schedule() {
   const fmt = (iso, opts) => new Intl.DateTimeFormat(locale, opts).format(new Date(`${iso}T00:00:00`));
   const rangeLabel = `${fmt(dates[0], { day: 'numeric', month: 'short' })} – ${fmt(dates[6], { day: 'numeric', month: 'short', year: 'numeric' })}`;
   const isFriday = (iso) => new Date(`${iso}T00:00:00`).getDay() === 5;
+
+  // Phone: show today when it's in the week on screen, else the week's first day.
+  useEffect(() => {
+    setSelDate((cur) => (cur && dates.includes(cur) ? cur : dates.includes(today) ? today : dates[0]));
+  }, [dates, today]);
+  const sel = selDate && dates.includes(selDate) ? selDate : (dates.includes(today) ? today : dates[0]);
 
   const byDate = useMemo(() => {
     const map = {};
@@ -142,6 +149,26 @@ export default function Schedule() {
       </Link>
     );
   };
+
+  // Phone: who works each department of a shift, in department order.
+  const deptPeople = (shift) => Object.entries(shift.assignments || {})
+    .map(([deptId, byRole]) => {
+      const d = state.departments.find((x) => x.id === deptId);
+      const ids = [...new Set(Object.values(byRole || {}).flat())];
+      return {
+        id: deptId,
+        priority: d ? d.priority : 999,
+        name: (shift.deptNames && shift.deptNames[deptId]) || (d ? deptLabel(d, state.departments) : '?'),
+        people: ids.map(workerName),
+      };
+    })
+    .filter((x) => x.people.length > 0)
+    .sort((a, b) => a.priority - b.priority);
+  const hoursOf = (st) => {
+    const h = (state.shiftTimes || {})[st];
+    return h && h.start && h.end ? `${h.start}–${h.end}` : '';
+  };
+  const typesFor = (d) => SHIFT_TYPES.filter((st) => st !== 'Friday' || isFriday(d) || shiftFor(d, st));
 
   const toastText = { saved: t('toastSaved'), updated: t('toastUpdated'), deleted: t('toastDeleted'), copied: t('copiedToClipboard') }[toast];
 
@@ -251,7 +278,7 @@ export default function Schedule() {
                     <span className="tone-icon"><Icon size={15} /></span>
                     <span className="board-row-text">
                       <span>{shiftLabel(t, st)}</span>
-                      {(state.shiftTimes || {})[st] && <small>{state.shiftTimes[st].start}–{state.shiftTimes[st].end}</small>}
+                      {(state.shiftTimes || {})[st] && <small dir="ltr">{state.shiftTimes[st].start}–{state.shiftTimes[st].end}</small>}
                     </span>
                   </div>
                   {dates.map((d) => (
@@ -265,32 +292,98 @@ export default function Schedule() {
           </div>
         </div>
 
-        {/* Phone: a card per day */}
+        {/* Phone: pick a day, see it in full */}
         <div className="board-days">
-          {dates.map((d) => (
-            <section key={d} className={`day-card ${d === today ? 'is-today' : ''}`}>
-              <header className="day-card-head">
-                <span className="day-card-name">{fmt(d, { weekday: 'long' })}</span>
-                <span className="day-card-date">{fmt(d, { day: 'numeric', month: 'short' })}</span>
-                {d === today && <span className="badge badge-primary">{t('today')}</span>}
-                {(byDate[d] || []).length > 0 && (
-                  <button type="button" className="day-share" onClick={() => setShareDate(d)} aria-label={`${t('shareDay')} — ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}`}>
-                    <Share2 size={13} /> {t('shareDayShort')}
-                  </button>
-                )}
-              </header>
-              {SHIFT_TYPES.filter((st) => st !== 'Friday' || isFriday(d) || shiftFor(d, st)).map((st) => {
-                const meta = shiftMeta(st);
-                const Icon = meta.icon;
+          <div className="mday-strip" role="tablist" aria-label={rangeLabel}>
+            {dates.map((d) => {
+              const list = SHIFT_TYPES.map((st) => shiftFor(d, st)).filter(Boolean);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  role="tab"
+                  aria-selected={d === sel}
+                  aria-label={fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}
+                  className={`mday-chip ${d === sel ? 'is-sel' : ''} ${d === today ? 'is-today' : ''} ${d < today ? 'is-past' : ''}`}
+                  onClick={() => setSelDate(d)}
+                >
+                  <span className="mday-chip-name">{fmt(d, { weekday: 'short' })}</span>
+                  <span className="mday-chip-num">{fmt(d, { day: 'numeric' })}</span>
+                  <span className="mday-dots" aria-hidden="true">
+                    {list.map((sh) => (
+                      <i key={sh.id} className={`tone-${shiftMeta(sh.name).tone} ${countGaps(sh.gaps) > 0 ? 'is-warn' : ''}`} />
+                    ))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mday-head">
+            <div className="mday-title">
+              <h3>{fmt(sel, { weekday: 'long' })}</h3>
+              <span>{fmt(sel, { day: 'numeric', month: 'long' })}</span>
+            </div>
+            {sel === today && <span className="badge badge-primary">{t('today')}</span>}
+            {(byDate[sel] || []).length > 0 && (
+              <button type="button" className="day-share" onClick={() => setShareDate(sel)} aria-label={`${t('shareDay')} — ${fmt(sel, { weekday: 'long', day: 'numeric', month: 'long' })}`}>
+                <Share2 size={14} /> {t('shareDayShort')}
+              </button>
+            )}
+          </div>
+
+          <div className="mday-list">
+            {typesFor(sel).map((st) => {
+              const meta = shiftMeta(st);
+              const Icon = meta.icon;
+              const shift = shiftFor(sel, st);
+              if (!shift) {
                 return (
-                  <div key={st} className={`day-card-row tone-${meta.tone}`}>
-                    <span className="tone-pill"><Icon size={13} /> {shiftLabel(t, st)}</span>
-                    <div className="day-card-slot">{renderSlot(d, st)}</div>
-                  </div>
+                  <Link
+                    key={st}
+                    to={`/build?date=${sel}&shift=${st}`}
+                    className={`mshift-add tone-${meta.tone} ${sel < today ? 'is-past' : ''}`}
+                    aria-label={`${t('buildThisShift')} — ${shiftLabel(t, st)}, ${fmt(sel, { weekday: 'long', day: 'numeric', month: 'long' })}`}
+                  >
+                    <span className="tone-icon"><Icon size={17} /></span>
+                    <span className="mshift-title">
+                      <strong>{shiftLabel(t, st)}</strong>
+                      {hoursOf(st) && <small>{hoursOf(st)}</small>}
+                    </span>
+                    <span className="mshift-add-cta"><Plus size={15} /> {t('buildThisShift')}</span>
+                  </Link>
                 );
-              })}
-            </section>
-          ))}
+              }
+              const gaps = countGaps(shift.gaps);
+              const depts = deptPeople(shift);
+              return (
+                <button key={st} type="button" className={`mshift tone-${meta.tone}`} onClick={() => setOpenShiftId(shift.id)}>
+                  <span className="mshift-top">
+                    <span className="tone-icon"><Icon size={17} /></span>
+                    <span className="mshift-title">
+                      <strong>{shiftLabel(t, st)}</strong>
+                      {hoursOf(st) && <small>{hoursOf(st)}</small>}
+                    </span>
+                    {gaps > 0
+                      ? <span className="status status-warning"><AlertTriangle size={12} /> {t('openCount', { n: gaps })}</span>
+                      : <span className="status status-success"><CheckCircle2 size={12} /> {t('workersAssigned', { n: countAssigned(shift.assignments) })}</span>}
+                  </span>
+                  {depts.length > 0 && (
+                    <span className="mshift-depts">
+                      {depts.map((d) => (
+                        <span key={d.id} className="mshift-dept">
+                          <span className="mshift-dept-name">{d.name}</span>
+                          <span className="mshift-people">
+                            {d.people.map((n, i) => <span key={i} className="mshift-person"><Avatar name={n} size="xs" /><span dir="auto">{n}</span></span>)}
+                          </span>
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 

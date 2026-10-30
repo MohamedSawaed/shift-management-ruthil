@@ -45,7 +45,7 @@ export default function ShiftDrawer({ shift, onClose, onShare, onCopy, onDelete 
             <span className="drawer-kicker">{dateLabel}</span>
             <h2>{shiftLabel(t, shift.name)}</h2>
             <span className="drawer-meta">
-              {hours.start && hours.end && <><Clock size={13} /> {hours.start}–{hours.end} · </>}
+              {hours.start && hours.end && <><Clock size={13} /> <bdi dir="ltr">{hours.start}–{hours.end}</bdi> · </>}
               {t('workersAssigned', { n: countAssigned(shift.assignments) })}
             </span>
           </div>
@@ -82,7 +82,7 @@ export default function ShiftDrawer({ shift, onClose, onShare, onCopy, onDelete 
                             <span key={wid} className="drawer-person">
                               <Avatar name={workerName(wid)} size="xs" />
                               <span dir="auto">{workerName(wid)}</span>
-                              {custom && <span className="drawer-person-time">{wt.start}–{wt.end}</span>}
+                              {custom && <span className="drawer-person-time" dir="ltr">{wt.start}–{wt.end}</span>}
                             </span>
                           );
                         })}
