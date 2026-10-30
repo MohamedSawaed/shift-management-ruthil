@@ -42,6 +42,11 @@ function mergeData(local, remote) {
     shiftTimes: { ...(remote.shiftTimes || {}), ...(local.shiftTimes || {}) },
   };
 }
+// True when a copy has anything in it (an empty copy must never replace or
+// overwrite a real one).
+function hasContent(d) {
+  return !!d && ['roles', 'departments', 'workers', 'shifts'].some((k) => Array.isArray(d[k]) && d[k].length > 0);
+}
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ignore */ } };
 
 const AppContext = createContext();
@@ -93,7 +98,16 @@ function loadState() {
 
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return normalizeParsed(JSON.parse(raw));
+      const parsed = normalizeParsed(JSON.parse(raw));
+      if (!hasContent(parsed)) {
+        const backup = localStorage.getItem(BACKUP_KEY);
+        const b = backup ? normalizeParsed(JSON.parse(backup)) : null;
+        if (hasContent(b)) {
+          localStorage.setItem(DIRTY_KEY, '1'); // so it gets added to the cloud copy
+          return b;
+        }
+      }
+      return parsed;
     }
   } catch {
     // Primary storage is corrupted — try the backup copy before giving up on the data.
@@ -247,7 +261,16 @@ export function AppProvider({ children }) {
 
   // Upload this device's data and remember which cloud version it now is.
   const pushNow = useCallback(async (code) => {
-    const sent = stateRef.current;
+    let sent = stateRef.current;
+    const remote = await pullWorkspace(code);
+    const seen = lsGet(SEEN_KEY);
+    if (remote && hasContent(remote.data) && remote.updated_at !== seen) {
+      sent = mergeData(sent, remote.data);
+      skipNextSyncRef.current = true;
+      dispatch({ type: 'REPLACE_STATE', payload: sent });
+      stateRef.current = sent;
+    }
+    if (!hasContent(sent) && remote && hasContent(remote.data)) return; // nothing to add
     const updatedAt = await pushWorkspace(code, sent);
     if (updatedAt) lsSet(SEEN_KEY, updatedAt);
     // Only clear "dirty" if nothing changed while the upload was in flight.
@@ -261,6 +284,9 @@ export function AppProvider({ children }) {
   //  • both changed → keep the more recent side (rare: edits on two devices
   //    between syncs).
   const pullingRef = useRef(false);
+  // False until this device has compared itself with the cloud once — until
+  // then it must not upload (it could hold stale or empty data).
+  const readyRef = useRef(false);
   const syncWithCloud = useCallback(async ({ quiet = false } = {}) => {
     if (!isCloudEnabled() || !syncCode || pullingRef.current) return;
     if (pushTimerRef.current) return; // an upload is about to happen anyway
@@ -271,16 +297,15 @@ export function AppProvider({ children }) {
       const seen = lsGet(SEEN_KEY);
       const localModified = Number(lsGet(LAST_MODIFIED_KEY) || 0);
       const remoteAt = remote && remote.updated_at ? remote.updated_at : null;
-      const remoteMs = remoteAt ? new Date(remoteAt).getTime() : 0;
       // Devices updated before version tracking existed: fall back to times.
-      const dirty = lsGet(DIRTY_KEY) === '1' || (!seen && localModified > remoteMs);
+      const dirty = lsGet(DIRTY_KEY) === '1' || (!seen && localModified > 0);
 
       if (lsGet(JOINED_KEY) !== SHARED_ID) {
         // First time this device joins the shared copy: combine what it has
         // with what's already in the cloud, so nobody's entries get lost.
-        const merged = remote && remote.data ? mergeData(stateRef.current, remote.data) : stateRef.current;
-        const updatedAt = await pushWorkspace(syncCode, merged);
-        if (remote && remote.data) {
+        const merged = remote && hasContent(remote.data) ? mergeData(stateRef.current, remote.data) : stateRef.current;
+        const updatedAt = hasContent(merged) ? await pushWorkspace(syncCode, merged) : (remote && remote.updated_at);
+        if (remote && hasContent(remote.data)) {
           skipNextSyncRef.current = true;
           dispatch({ type: 'REPLACE_STATE', payload: merged });
         }
@@ -288,19 +313,22 @@ export function AppProvider({ children }) {
         lsSet(DIRTY_KEY, null);
         lsSet(JOINED_KEY, SHARED_ID);
         setLastSynced(new Date());
-      } else if (!remote || !remote.data) {
-        await pushNow(syncCode);
+      } else if (!remote || !hasContent(remote.data)) {
+        // Cloud is empty: fill it from this device (never take an empty copy).
+        if (hasContent(stateRef.current)) await pushNow(syncCode);
       } else if (remoteAt && seen && remoteAt === seen) {
         if (dirty) await pushNow(syncCode);
-      } else if (!dirty || remoteMs >= localModified) {
+      } else if (dirty) {
+        // Both this device and another changed: combine them.
+        await pushNow(syncCode);
+      } else {
         skipNextSyncRef.current = true;
         dispatch({ type: 'REPLACE_STATE', payload: remote.data });
         lsSet(SEEN_KEY, remoteAt);
         lsSet(DIRTY_KEY, null);
         setLastSynced(new Date());
-      } else {
-        await pushNow(syncCode);
       }
+      readyRef.current = true;
       setSyncStatus('idle');
     } catch (err) {
       console.error('Sync failed:', err);
@@ -336,9 +364,14 @@ export function AppProvider({ children }) {
       skipNextSyncRef.current = false;
       return undefined;
     }
+    if (!readyRef.current || lsGet(DIRTY_KEY) !== '1') return undefined;
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(async () => {
       pushTimerRef.current = null;
+      if (pullingRef.current) {
+        // A sync is running and will upload these edits itself.
+        return;
+      }
       try {
         setSyncStatus('syncing');
         await pushNow(syncCode);
@@ -371,7 +404,7 @@ export function AppProvider({ children }) {
         pushTimerRef.current = null;
       }
       // Only when there's something the cloud doesn't have yet.
-      if (!pending && lsGet(DIRTY_KEY) !== '1') return;
+      if (!readyRef.current || (!pending && lsGet(DIRTY_KEY) !== '1')) return;
       const updatedAt = flushPushWorkspace(syncCode, stateRef.current);
       if (updatedAt) lsSet(SEEN_KEY, updatedAt);
     };
