@@ -16,12 +16,39 @@ export default function Departments({ embedded = false }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [expandedDept, setExpandedDept] = useState(null);
   const [featureInput, setFeatureInput] = useState('');
+  const [newRoles, setNewRoles] = useState([]); // roles chosen while creating a department
 
   const roles = [...state.roles].sort((a, b) => a.priority - b.priority);
   const parents = state.departments.filter((d) => !d.parentId);
   const getChildren = (parentId) =>
     state.departments.filter((d) => d.parentId === parentId).sort((a, b) => a.priority - b.priority);
   const sorted = [...parents].sort((a, b) => a.priority - b.priority);
+
+  // The roles a department uses (in priority order) and the ones it doesn't.
+  const has = (dept, roleId) => Object.prototype.hasOwnProperty.call(dept.requirements || {}, roleId);
+  const deptRoles = (dept) => roles.filter((r) => has(dept, r.id));
+  const otherRoles = (dept) => roles.filter((r) => !has(dept, r.id));
+  const newReqs = () => Object.fromEntries(newRoles.map((id) => [id, 1]));
+  const toggleNewRole = (id) => setNewRoles((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  // Add/remove a role for a department; on a parent, its sub-departments follow.
+  const addRoleToDept = (dept, roleId, isChild) => {
+    dispatch({ type: 'UPDATE_DEPARTMENT', payload: { id: dept.id, requirements: { ...(dept.requirements || {}), [roleId]: 1 } } });
+    if (!isChild) {
+      getChildren(dept.id).forEach((child) => {
+        if (!has(child, roleId)) dispatch({ type: 'UPDATE_DEPARTMENT', payload: { id: child.id, requirements: { ...(child.requirements || {}), [roleId]: 1 } } });
+      });
+    }
+  };
+  const removeRoleFromDept = (dept, roleId, isChild) => {
+    const strip = (d) => {
+      const reqs = { ...(d.requirements || {}) };
+      delete reqs[roleId];
+      dispatch({ type: 'UPDATE_DEPARTMENT', payload: { id: d.id, requirements: reqs } });
+    };
+    strip(dept);
+    if (!isChild) getChildren(dept.id).forEach(strip);
+  };
 
   // ─── Add flow ───
   const startAdd = (e) => {
@@ -30,22 +57,19 @@ export default function Departments({ embedded = false }) {
     setPendingParentName(name.trim());
     setShowChildPrompt(true);
     setChildNames('');
+    setNewRoles([]);
   };
 
   const addStandalone = () => {
-    const requirements = {};
-    roles.forEach((r) => { requirements[r.id] = 0; });
-    dispatch({ type: 'ADD_DEPARTMENT', payload: { name: pendingParentName, requirements } });
-    setName(''); setShowChildPrompt(false); setPendingParentName('');
+    dispatch({ type: 'ADD_DEPARTMENT', payload: { name: pendingParentName, requirements: newReqs() } });
+    setName(''); setShowChildPrompt(false); setPendingParentName(''); setNewRoles([]);
   };
 
   const addWithChildren = () => {
     const names = childNames.split(',').map((s) => s.trim()).filter(Boolean);
     if (names.length === 0) return;
-    const requirements = {};
-    roles.forEach((r) => { requirements[r.id] = 0; });
-    dispatch({ type: 'ADD_DEPARTMENT_WITH_CHILDREN', payload: { parentName: pendingParentName, childNames: names, requirements } });
-    setName(''); setShowChildPrompt(false); setPendingParentName(''); setChildNames('');
+    dispatch({ type: 'ADD_DEPARTMENT_WITH_CHILDREN', payload: { parentName: pendingParentName, childNames: names, requirements: newReqs() } });
+    setName(''); setShowChildPrompt(false); setPendingParentName(''); setChildNames(''); setNewRoles([]);
   };
 
   const addChildToDept = (parentId) => {
@@ -244,9 +268,10 @@ export default function Departments({ embedded = false }) {
 
         {roles.length > 0 && (
           <div className="dept-section">
-            <h4 className="dept-section-title">{t('workersNeededPerRole')}</h4>
+            <h4 className="dept-section-title">{t('deptRolesTitle')}</h4>
+            {deptRoles(dept).length === 0 && <p className="dept-roles-empty">{t('deptRolesEmpty')}</p>}
             <div className="role-requirements">
-              {roles.map((role) => (
+              {deptRoles(dept).map((role) => (
                 <div key={role.id} className="role-req-row">
                   <span className="role-req-label"><strong>{role.name}</strong></span>
                   <div className="stepper">
@@ -276,9 +301,22 @@ export default function Departments({ embedded = false }) {
                       }
                     }}>+</button>
                   </div>
+                  <button type="button" className="btn-icon role-req-remove" onClick={() => removeRoleFromDept(dept, role.id, isChild)} title={t('removeRoleFromDept')} aria-label={`${t('removeRoleFromDept')}: ${role.name}`}>
+                    <X size={15} />
+                  </button>
                 </div>
               ))}
             </div>
+            {otherRoles(dept).length > 0 && (
+              <div className="dept-add-roles">
+                <span className="dept-add-roles-label"><Plus size={14} /> {t('addRoleToDept')}</span>
+                {otherRoles(dept).map((role) => (
+                  <button key={role.id} type="button" className="chip chip-sm chip-add-role" onClick={() => addRoleToDept(dept, role.id, isChild)}>
+                    <Plus size={12} /> {role.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {state.workers.length > 0 && (
@@ -302,10 +340,10 @@ export default function Departments({ embedded = false }) {
                         toggleWorkerInDept(dept.id, worker.id);
                       }
                     }}>{worker.name}{worker.isGroup && <span className="chip-qty">×{groupSize(worker)}</span>}</button>
-                    {inDept && roles.length > 0 && (
+                    {inDept && deptRoles(dept).length > 0 && (
                       <div className="role-chips">
                         <span className="role-chips-label">{t('rolesLabel')}</span>
-                        {roles.map((role) => (
+                        {deptRoles(dept).map((role) => (
                           <button key={role.id} type="button" className={`chip chip-sm ${workerRoles.includes(role.id) ? 'chip-role-active' : ''}`} onClick={() => {
                             if (isChild) {
                               // Child: only toggle self
@@ -351,6 +389,19 @@ export default function Departments({ embedded = false }) {
 
       {showChildPrompt && (
         <div className="child-prompt">
+          {roles.length > 0 && (
+            <div className="new-dept-roles">
+              <div className="child-prompt-header"><strong>"{pendingParentName}"</strong> — {t('newDeptRolesQ')}</div>
+              <div className="chip-group">
+                {roles.map((role) => (
+                  <button key={role.id} type="button" aria-pressed={newRoles.includes(role.id)} className={`chip ${newRoles.includes(role.id) ? 'chip-role-active' : ''}`} onClick={() => toggleNewRole(role.id)}>
+                    {newRoles.includes(role.id) && <span aria-hidden="true">✓</span>} {role.name}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">{t('newDeptRolesHint')}</p>
+            </div>
+          )}
           <div className="child-prompt-header">
             <strong>"{pendingParentName}"</strong> — {t('hasSubDepts')}
           </div>
@@ -401,6 +452,7 @@ export default function Departments({ embedded = false }) {
                         )}
                         {hasChildren && <span className="badge badge-parent">{children.length} {t('subDeptsCount')}</span>}
                         <span className="card-meta"> · {getTotalNeeded(dept)} {t('totalNeeded')} · {deptWorkers.length} {t('workersLabel')}</span>
+                        {deptRoles(dept).length > 0 && <span className="dept-role-summary">{deptRoles(dept).map((r) => r.name).join(' · ')}</span>}
                       </div>
                       <ChevronDown size={18} className={`chevron ${isExpanded ? 'chevron-open' : ''}`} />
                     </div>
@@ -435,6 +487,7 @@ export default function Departments({ embedded = false }) {
                                   <span className="feature-inline">{(child.features || []).join(' · ')}</span>
                                 )}
                                 <span className="card-meta"> · {getTotalNeeded(child)} {t('totalNeeded')} · {childWorkers.length} {t('workersLabel')}</span>
+                                {deptRoles(child).length > 0 && <span className="dept-role-summary">{deptRoles(child).map((r) => r.name).join(' · ')}</span>}
                               </div>
                               <ChevronDown size={16} className={`chevron ${childExpanded ? 'chevron-open' : ''}`} />
                             </div>

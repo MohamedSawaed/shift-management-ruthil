@@ -351,6 +351,13 @@ export const translations = {
     pickShowLess: 'Hide',
     groupAvailable: '{n} available',
     remove: 'Remove',
+    // Department roles
+    deptRolesTitle: 'Roles in this department · how many needed',
+    deptRolesEmpty: 'No roles yet — add the roles that work in this department.',
+    addRoleToDept: 'Add role:',
+    removeRoleFromDept: 'Remove this role from the department',
+    newDeptRolesQ: 'which roles work here?',
+    newDeptRolesHint: 'You can change this later. Each chosen role starts at 1 needed.',
   },
 
   he: {
@@ -704,5 +711,12 @@ export const translations = {
     pickShowLess: 'הסתר',
     groupAvailable: '{n} זמינים',
     remove: 'הסר',
+    // Department roles
+    deptRolesTitle: 'תפקידים במחלקה · כמה נדרשים',
+    deptRolesEmpty: 'אין עדיין תפקידים — הוסף את התפקידים שעובדים במחלקה הזו.',
+    addRoleToDept: 'הוסף תפקיד:',
+    removeRoleFromDept: 'הסר את התפקיד מהמחלקה',
+    newDeptRolesQ: 'אילו תפקידים עובדים כאן?',
+    newDeptRolesHint: 'אפשר לשנות בהמשך. כל תפקיד שנבחר מתחיל ב-1 נדרש.',
   },
 };

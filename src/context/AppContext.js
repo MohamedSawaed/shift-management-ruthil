@@ -62,13 +62,20 @@ const defaultState = {
   },
 };
 
+// A department uses exactly the roles listed in its `requirements`. Older
+// data stored every role (unused ones as 0) — drop those zeros once
+// (`reqsV: 2` marks departments already cleaned up).
+function normalizeDept(d) {
+  const requirements = d.requirements && typeof d.requirements === 'object' ? d.requirements : {};
+  if (d.reqsV === 2) return { ...d, requirements };
+  const used = Object.fromEntries(Object.entries(requirements).filter(([, n]) => Number(n) > 0));
+  return { ...d, requirements: used, reqsV: 2 };
+}
+
 function normalizeParsed(parsed) {
   return {
     roles: Array.isArray(parsed.roles) ? parsed.roles : [],
-    departments: (Array.isArray(parsed.departments) ? parsed.departments : []).map((d) => ({
-      ...d,
-      requirements: d.requirements && typeof d.requirements === 'object' ? d.requirements : {},
-    })),
+    departments: (Array.isArray(parsed.departments) ? parsed.departments : []).map(normalizeDept),
     workers: (Array.isArray(parsed.workers) ? parsed.workers : []).map((w) => ({
       ...w,
       assignments: Array.isArray(w.assignments) ? w.assignments : [],
@@ -112,10 +119,7 @@ function reducer(state, action) {
           assignments: Array.isArray(w.assignments) ? w.assignments : [],
           availability: w.availability || {},
         })),
-        departments: (action.payload.departments || []).map((d) => ({
-          ...d,
-          requirements: d.requirements && typeof d.requirements === 'object' ? d.requirements : {},
-        })),
+        departments: (action.payload.departments || []).map(normalizeDept),
       };
 
     case 'ADD_ROLE':
@@ -142,12 +146,13 @@ function reducer(state, action) {
         requirements: action.payload.requirements || {},
         parentId: action.payload.parentId || null,
         isParent: action.payload.isParent || false,
+        reqsV: 2,
       }] };
     case 'ADD_DEPARTMENT_WITH_CHILDREN': {
       const { parentName, childNames, requirements } = action.payload;
       const parentId = uuid();
       const newDepts = [
-        { id: parentId, name: parentName, priority: state.departments.length + 1, requirements: { ...requirements }, parentId: null, isParent: true },
+        { id: parentId, name: parentName, priority: state.departments.length + 1, requirements: { ...requirements }, parentId: null, isParent: true, reqsV: 2 },
         ...childNames.map((cn, i) => ({
           id: uuid(),
           name: cn,
@@ -155,6 +160,7 @@ function reducer(state, action) {
           requirements: { ...requirements },
           parentId,
           isParent: false,
+          reqsV: 2,
         })),
       ];
       return { ...state, departments: [...state.departments, ...newDepts] };
