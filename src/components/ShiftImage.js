@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLang } from '../i18n/LangContext';
+import { useApp } from '../context/AppContext';
 import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift } from '../lib/shiftTypes';
 import { renderShareImage } from '../lib/shiftImageCanvas';
 import { X, Share2, Copy, Download, Loader2, MoreHorizontal } from 'lucide-react';
@@ -17,6 +18,9 @@ const IS_MOBILE = typeof navigator !== 'undefined' && (
 // (`dayShifts` — all on the same date).
 export default function ShiftImage({ shift, dayShifts, departments, workers, getDeptLabel, onClose }) {
   const { t, lang } = useLang();
+  const { state } = useApp();
+  const roles = state.roles || [];
+  const shiftTimes = state.shiftTimes || {};
   const rtl = lang === 'he';
   const [image, setImage] = useState(null); // { blob, url, file }
   const [failed, setFailed] = useState(false);
@@ -50,12 +54,14 @@ export default function ShiftImage({ shift, dayShifts, departments, workers, get
     let cancelled = false;
     let url = null;
     renderShareImage({
-      departments, workers, getDeptLabel, rtl,
-      sections: shifts.map((sh) => ({ shift: sh, label: labelForShift(t, sh.name), tone: shiftMeta(sh.name).tone })),
+      departments, workers, roles, getDeptLabel, rtl,
+      appName: t('appName'),
+      sections: shifts.map((sh) => ({ shift: sh, label: labelForShift(t, sh.name), tone: shiftMeta(sh.name).tone, hours: shiftTimes[sh.name] || {} })),
       title: label,
       kicker: isDay ? t('dayScheduleShort') : t('shiftScheduleShort'),
       dateLine: isDay ? dateShort : `${dayName} · ${dateShort}`,
       heroTone: isDay ? 'day' : shiftMeta(shift.name).tone,
+      hoursLine: !isDay && shiftTimes[shift.name] ? `${shiftTimes[shift.name].start}–${shiftTimes[shift.name].end}` : '',
     }).then((blob) => {
       if (cancelled || !blob) return;
       url = URL.createObjectURL(blob);
@@ -68,7 +74,7 @@ export default function ShiftImage({ shift, dayShifts, departments, workers, get
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [shift, dayShifts, departments, workers, rtl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shift, dayShifts, departments, workers, roles, shiftTimes, rtl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!notice) return undefined;
