@@ -4961,61 +4961,6 @@ html[dir="rtl"] .dept-section-title {
   padding: 6px 2px;
 }
 
-.pick-section {
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.pick-section-head {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  padding: 12px 16px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-}
-
-.pick-role {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.02rem;
-}
-
-html[dir="rtl"] .pick-role {
-  font-family: 'Heebo', var(--font-ui);
-}
-
-.pick-need {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-3);
-}
-
-.pick-status {
-  margin-inline-start: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding-inline: 10px;
-  border-radius: var(--r-full);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.pick-status.ok {
-  background: var(--success-soft);
-  color: var(--success-strong);
-}
-
-.pick-status.warn {
-  background: var(--warning-soft);
-  color: var(--warning-strong);
-}
-
 .pick-list {
   list-style: none;
   display: grid;
@@ -5059,34 +5004,6 @@ html[dir="rtl"] .pick-role {
   border-color: var(--primary);
 }
 
-.pick-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  height: 44px;
-  border: none;
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--primary-strong);
-  font: inherit;
-  font-size: 0.86rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.pick-more:hover {
-  background: var(--primary-soft);
-}
-
-.pick-more svg {
-  transition: transform var(--fast);
-}
-
-.pick-more.is-open svg {
-  transform: rotate(180deg);
-}
 
 .pick-row .avatar-sm {
   width: 36px;
@@ -5285,4 +5202,128 @@ html[dir="rtl"] .pick-role {
 
 .new-dept-roles .chip-group {
   margin: 4px 0 8px;
+}
+
+/* Picker v2: one alphabetical list, pinned search + filters */
+.picker-bar {
+  position: sticky;
+  top: calc(var(--topbar-h) + 8px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  margin-inline: -10px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+}
+
+.picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding-inline: 12px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--fast), border-color var(--fast), color var(--fast);
+}
+
+.filter-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.filter-chip.is-on {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.filter-role.ok svg { color: var(--success); }
+.filter-role.warn svg { color: var(--warning); }
+.filter-role.warn { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+.filter-chip.is-on svg { color: inherit; }
+
+.filter-count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.filter-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin-inline: 2px;
+}
+
+.pick-letters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pick-letter {
+  display: flex;
+  flex-direction: column;
+}
+
+.pick-letter-head {
+  padding: 6px 4px;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--primary);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+html[dir="rtl"] .pick-letter-head {
+  font-family: 'Heebo', var(--font-ui);
+}
+
+.pick-letter .pick-list {
+  padding: 0 0 6px;
+}
+
+.pick-list-flat {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  padding: 0;
+}
+
+@media (max-width: 760px) {
+  .picker-bar {
+    top: calc(58px + 6px);
+  }
+
+  .picker-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .picker-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pick-letter .pick-list {
+    padding: 0 0 4px;
+  }
 }
