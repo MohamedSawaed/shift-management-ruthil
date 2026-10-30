@@ -52,6 +52,13 @@ function mergeData(local, remote) {
 function hasContent(d) {
   return !!d && ['roles', 'departments', 'workers', 'shifts'].some((k) => Array.isArray(d[k]) && d[k].length > 0);
 }
+// True when `a` holds an item (by id) that `b` doesn't.
+function addsTo(a, b) {
+  return ['roles', 'departments', 'workers', 'shifts'].some((k) => {
+    const have = new Set((b[k] || []).map((x) => x && x.id));
+    return (a[k] || []).some((x) => x && !have.has(x.id));
+  });
+}
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ignore */ } };
 
 const AppContext = createContext();
@@ -106,12 +113,18 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = normalizeParsed(JSON.parse(raw));
-      if (!hasContent(parsed)) {
+      // Anything the backup copy still has that wasn't deleted on purpose (e.g.
+      // replaced by an emptier cloud copy in older versions) is added back.
+      let b = null;
+      try {
         const backup = localStorage.getItem(BACKUP_KEY);
-        const b = backup ? normalizeParsed(JSON.parse(backup)) : null;
-        if (hasContent(b)) {
+        b = backup ? normalizeParsed(JSON.parse(backup)) : null;
+      } catch { /* no usable backup */ }
+      if (b && hasContent(b)) {
+        const merged = normalizeParsed(mergeData(parsed, b));
+        if (addsTo(merged, parsed)) {
           localStorage.setItem(DIRTY_KEY, '1'); // so it gets added to the cloud copy
-          return b;
+          return merged;
         }
       }
       return parsed;
@@ -272,8 +285,9 @@ export function AppProvider({ children }) {
   const pushNow = useCallback(async (code) => {
     let sent = stateRef.current;
     const remote = await pullWorkspace(code);
-    const seen = lsGet(SEEN_KEY);
-    if (remote && hasContent(remote.data) && !sameVersion(remote.updated_at, seen)) {
+    // Always combine with the cloud copy first (this device's edits win), so
+    // nothing another device added or deleted is undone by this upload.
+    if (remote && hasContent(remote.data)) {
       sent = mergeData(sent, remote.data);
       skipNextSyncRef.current = true;
       dispatch({ type: 'REPLACE_STATE', payload: sent });
@@ -331,10 +345,18 @@ export function AppProvider({ children }) {
         // Both this device and another changed: combine them.
         await pushNow(syncCode);
       } else {
+        // Another device saved: take its changes, but never drop anything this
+        // device has that wasn't deleted on purpose — send that back up.
+        const merged = mergeData(remote.data, stateRef.current);
         skipNextSyncRef.current = true;
-        dispatch({ type: 'REPLACE_STATE', payload: remote.data });
+        dispatch({ type: 'REPLACE_STATE', payload: merged });
+        stateRef.current = merged;
         lsSet(SEEN_KEY, remoteAt);
         lsSet(DIRTY_KEY, null);
+        if (addsTo(merged, remote.data)) {
+          const updatedAt = await pushWorkspace(syncCode, merged);
+          if (updatedAt) lsSet(SEEN_KEY, updatedAt);
+        }
         setLastSynced(new Date());
       }
       readyRef.current = true;
