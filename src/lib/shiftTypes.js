@@ -68,3 +68,11 @@ export function addDays(iso, n) {
   const [y, m, d] = iso.split('-').map(Number);
   return localDateISO(new Date(y, m - 1, d + n));
 }
+
+// The Monday–Sunday week (local YYYY-MM-DD dates) that `iso` falls in.
+export function weekDatesOf(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const day = new Date(y, m - 1, d).getDay();
+  const monday = addDays(iso, -(day === 0 ? 6 : day - 1));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}

@@ -2,11 +2,11 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useApp, autoAssign, isWorkerAvailable } from '../context/AppContext';
 import { useLang } from '../i18n/LangContext';
-import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO, shiftInterval, addDays } from '../lib/shiftTypes';
+import { SHIFT_TYPES, shiftMeta, shiftLabel as labelForShift, countGaps, localDateISO, shiftInterval, addDays, weekDatesOf } from '../lib/shiftTypes';
 import Avatar from '../components/Avatar';
-import WorkerPicker from '../components/WorkerPicker';
+import SeatBoard from '../components/SeatBoard';
 import { expandWorkers, workerName as nameOf, sortByName } from '../lib/workers';
-import { Zap, Save, AlertTriangle, Undo2, Pencil, Image, Sparkles, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
+import { Save, AlertTriangle, Undo2, Pencil, Image, CheckCircle2, ArrowLeft, ArrowRight, Check, RotateCcw, X, Users, Building2 } from 'lucide-react';
 import ShiftImage from '../components/ShiftImage';
 
 export default function Shifts() {
@@ -32,7 +32,8 @@ export default function Shifts() {
   const [editingDeptName, setEditingDeptName] = useState(null);
   // Wizard: 1 When → 2 Departments → 3 Workers → 4 Review
   const [step, setStep] = useState(1);
-  const [autoPicked, setAutoPicked] = useState(false);
+  // Who sits where: { [deptId]: { [roleId]: [workerId, …] } }
+  const [seats, setSeats] = useState({});
   const [dragWorker, setDragWorker] = useState(null);
   const [shareShift, setShareShift] = useState(null);
   const [selectedSwapWorker, setSelectedSwapWorker] = useState(null);
@@ -155,243 +156,113 @@ export default function Shifts() {
 
   const toggleDept = (id) => { setSelectedDepts((p) => p.includes(id) ? p.filter((d) => d !== id) : [...p, id]); setResult(null); };
   const selectAllDepts = () => { setSelectedDepts(allDepts.map((d) => d.id)); setResult(null); };
-  const toggleWorker = (id) => { setSelectedWorkers((p) => p.includes(id) ? p.filter((w) => w !== id) : [...p, id]); setResult(null); };
-  const selectAllWorkers = () => { setSelectedWorkers(relevantWorkers.map((w) => w.id)); setResult(null); };
-  const clearWorkers = () => { setSelectedWorkers([]); setResult(null); };
+  // ─── Seating board ───
+  const activeDepts = useMemo(() => allDepts.filter((d) => selectedDepts.includes(d.id)), [allDepts, selectedDepts]);
 
-  // ─── Smart worker analysis ───
-  const workerAnalysis = useMemo(() => {
-    if (selectedDepts.length === 0) return { workers: [], totalSlots: 0, coverage: 0, gaps: [] };
+  // Can this person sit in this department's role? (directly, or through the parent department)
+  const canFill = useCallback((w, deptId, roleId) => {
+    const assigns = w.assignments || [];
+    const direct = assigns.find((a) => a.deptId === deptId);
+    if (direct && (direct.roleIds || []).includes(roleId)) return true;
+    const dept = state.departments.find((d) => d.id === deptId);
+    if (dept && dept.parentId) {
+      const pa = assigns.find((a) => a.deptId === dept.parentId);
+      if (pa && (pa.roleIds || []).includes(roleId)) return true;
+    }
+    return false;
+  }, [state.departments]);
 
-    const activeDepts = allDepts.filter((d) => selectedDepts.includes(d.id));
-    const allDeptsFull = state.departments;
+  // Shifts each person already has this week — fewer comes first, so work is shared fairly.
+  const weekCounts = useMemo(() => {
+    const week = new Set(weekDatesOf(date));
+    const counts = {};
+    for (const sh of state.shifts) {
+      if (!week.has(sh.date) || (sh.date === date && sh.name === shiftName)) continue;
+      const ids = new Set(Object.values(sh.assignments || {}).flatMap((r) => Object.values(r || {}).flat()));
+      for (const id of ids) counts[id] = (counts[id] || 0) + 1;
+    }
+    return counts;
+  }, [state.shifts, date, shiftName]);
 
-    // Build all slots needed
-    const slots = [];
-    for (const dept of activeDepts) {
-      const reqs = dept.requirements || {};
-      for (const role of roles) {
-        const needed = reqs[role.id] || 0;
-        for (let i = 0; i < needed; i++) {
-          slots.push({ deptId: dept.id, roleId: role.id });
-        }
+  const seatedIds = (sts) => [...new Set(Object.values(sts).flatMap((r) => Object.values(r || {}).flat()))];
+  const seatTotals = useMemo(() => {
+    let total = 0;
+    let filled = 0;
+    for (const d of activeDepts) {
+      for (const r of roles) {
+        const need = (d.requirements || {})[r.id] || 0;
+        total += need;
+        filled += Math.min(need, ((seats[d.id] || {})[r.id] || []).length);
       }
     }
+    return { total, filled };
+  }, [activeDepts, roles, seats]);
 
-    // For each worker, compute which slots they can fill
-    const analyzed = relevantWorkers.map((w) => {
-      const assigns = w.assignments || [];
-      const fillableSlots = slots.filter((slot) => {
-        const direct = assigns.find((a) => a.deptId === slot.deptId);
-        if (direct && (direct.roleIds || []).includes(slot.roleId)) return true;
-        const dept = allDeptsFull.find((d) => d.id === slot.deptId);
-        if (dept && dept.parentId) {
-          const pa = assigns.find((a) => a.deptId === dept.parentId);
-          if (pa && (pa.roleIds || []).includes(slot.roleId)) return true;
-        }
-        return false;
-      });
-
-      // Which unique role+dept combos can this worker fill
-      const roleSet = new Set(fillableSlots.map((s) => s.roleId));
-      const deptSet = new Set(fillableSlots.map((s) => s.deptId));
-      const roleNames = [...roleSet].map((rid) => roles.find((r) => r.id === rid)?.name || '?');
-
-      return {
-        ...w,
-        fillableCount: fillableSlots.length,
-        fillableSlots,
-        roleNames,
-        deptCount: deptSet.size,
-        roleCount: roleSet.size,
-      };
-    });
-
-    // Find "critical" workers — sole worker who can fill a specific slot type
-    // Group slots by deptId+roleId
-    const slotGroups = {};
-    for (const slot of slots) {
-      const key = `${slot.deptId}::${slot.roleId}`;
-      if (!slotGroups[key]) slotGroups[key] = { ...slot, count: 0 };
-      slotGroups[key].count++;
-    }
-
-    for (const wa of analyzed) {
-      wa.isCritical = false;
-      wa.criticalFor = [];
-    }
-
-    for (const key of Object.keys(slotGroups)) {
-      const sg = slotGroups[key];
-      const whoCanFill = analyzed.filter((wa) =>
-        wa.fillableSlots.some((s) => s.deptId === sg.deptId && s.roleId === sg.roleId)
-      );
-      if (whoCanFill.length <= sg.count) {
-        // These workers are critical — without them this slot can't be filled
-        for (const wa of whoCanFill) {
-          wa.isCritical = true;
-          const rn = roles.find((r) => r.id === sg.roleId)?.name || '?';
-          const dn = activeDepts.find((d) => d.id === sg.deptId)?.name || '?';
-          if (!wa.criticalFor.find((c) => c === `${rn} in ${dn}`)) {
-            wa.criticalFor.push(`${rn} in ${dn}`);
-          }
-        }
-      }
-    }
-
-    // ─── Simulate coverage with current selection ───
-    const selectedSet = new Set(selectedWorkers);
-
-    function simulateCoverage(workerIds) {
-      const pool = new Set(workerIds);
-      let filled = 0;
-      for (const slot of slots) {
-        const filler = analyzed.find((wa) =>
-          pool.has(wa.id) && wa.fillableSlots.some((s) => s.deptId === slot.deptId && s.roleId === slot.roleId)
-        );
-        if (filler) { pool.delete(filler.id); filled++; }
-      }
-      return filled;
-    }
-
-    const filledCount = simulateCoverage(selectedWorkers);
-
-    // ─── Per-worker impact: what happens if you add/remove this worker ───
-    for (const wa of analyzed) {
-      const isSelected = selectedSet.has(wa.id);
-      if (isSelected) {
-        // Impact of REMOVING: current coverage - coverage without them
-        const without = selectedWorkers.filter((id) => id !== wa.id);
-        const filledWithout = simulateCoverage(without);
-        wa.impact = filledCount - filledWithout; // positive = they're valuable
-        wa.impactLabel = wa.impact > 0 ? `-${wa.impact}` : '0';
-      } else {
-        // Impact of ADDING: coverage with them - current coverage
-        const withThem = [...selectedWorkers, wa.id];
-        const filledWith = simulateCoverage(withThem);
-        wa.impact = filledWith - filledCount;
-        wa.impactLabel = wa.impact > 0 ? `+${wa.impact}` : '0';
-      }
-    }
-
-    // ─── Gap analysis ───
-    const gapRoles = {};
-    for (const key of Object.keys(slotGroups)) {
-      const sg = slotGroups[key];
-      const canFillCount = analyzed.filter((wa) =>
-        selectedSet.has(wa.id) && wa.fillableSlots.some((s) => s.deptId === sg.deptId && s.roleId === sg.roleId)
-      ).length;
-      const missing = sg.count - Math.min(sg.count, canFillCount);
-      if (missing > 0) {
-        const rn = roles.find((r) => r.id === sg.roleId)?.name || '?';
-        gapRoles[rn] = (gapRoles[rn] || 0) + missing;
-      }
-    }
-
-    // ─── Sort: selected on top, then by impact desc, critical first for ties ───
-    analyzed.sort((a, b) => {
-      const aSelected = selectedSet.has(a.id) ? 1 : 0;
-      const bSelected = selectedSet.has(b.id) ? 1 : 0;
-      if (aSelected !== bSelected) return bSelected - aSelected; // selected first
-      // Among unselected: highest impact first
-      if (!aSelected) {
-        if (b.impact !== a.impact) return b.impact - a.impact;
-        if (a.isCritical !== b.isCritical) return a.isCritical ? -1 : 1;
-        return b.fillableCount - a.fillableCount;
-      }
-      // Among selected: most impactful (hardest to remove) first
-      if (b.impact !== a.impact) return b.impact - a.impact;
-      return b.fillableCount - a.fillableCount;
-    });
-
-    // Best next pick (highest impact unselected worker)
-    const bestNext = analyzed.find((wa) => !selectedSet.has(wa.id) && wa.impact > 0);
-
-    return {
-      workers: analyzed,
-      totalSlots: slots.length,
-      filledCount,
-      coverage: slots.length > 0 ? Math.round((filledCount / slots.length) * 100) : 100,
-      gaps: Object.entries(gapRoles).map(([role, count]) => ({ role, count })),
-      bestNextId: bestNext ? bestNext.id : null,
-    };
-  }, [relevantWorkers, selectedDepts, selectedWorkers, allDepts, roles, state.departments]);
-
-  // Smart select: pick the minimum workers to fill all slots
-  const smartSelect = useCallback(() => {
-    if (workerAnalysis.totalSlots === 0) return;
-    // Start with critical workers, then greedily add most-covering workers
-    const picked = new Set();
-    const remaining = [...workerAnalysis.workers];
-
-    // Always pick critical first
-    for (const w of remaining) {
-      if (w.isCritical) picked.add(w.id);
-    }
-
-    // Greedy: keep adding worker who covers most remaining uncovered slots
-    const slots = [];
-    const activeDepts = allDepts.filter((d) => selectedDepts.includes(d.id));
-    for (const dept of activeDepts) {
-      const reqs = dept.requirements || {};
-      for (const role of roles) {
-        const needed = reqs[role.id] || 0;
-        for (let i = 0; i < needed; i++) slots.push({ deptId: dept.id, roleId: role.id, filled: false });
-      }
-    }
-
-    // Mark slots filled by critical workers
-    const availablePool = new Set(picked);
-    for (const slot of slots) {
-      const filler = remaining.find((wa) =>
-        availablePool.has(wa.id) && wa.fillableSlots.some((s) => s.deptId === slot.deptId && s.roleId === slot.roleId)
-      );
-      if (filler) {
-        availablePool.delete(filler.id);
-        slot.filled = true;
-      }
-    }
-
-    // Greedily add more
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const unfilled = slots.filter((s) => !s.filled);
-      if (unfilled.length === 0) break;
-
-      let bestWorker = null;
-      let bestCover = 0;
-      for (const wa of remaining) {
-        if (picked.has(wa.id)) continue;
-        const covers = unfilled.filter((s) =>
-          wa.fillableSlots.some((fs) => fs.deptId === s.deptId && fs.roleId === s.roleId)
-        ).length;
-        if (covers > bestCover) {
-          bestCover = covers;
-          bestWorker = wa;
-        }
-      }
-      if (bestWorker && bestCover > 0) {
-        picked.add(bestWorker.id);
-        // Mark slots
-        for (const slot of unfilled) {
-          if (!slot.filled && bestWorker.fillableSlots.some((fs) => fs.deptId === slot.deptId && fs.roleId === slot.roleId)) {
-            slot.filled = true;
-            break; // one worker fills one slot
-          }
-        }
-        changed = true;
-      }
-    }
-
-    setSelectedWorkers([...picked]);
+  const updateSeats = (next) => {
+    setSeats(next);
+    setSelectedWorkers(seatedIds(next));
     setResult(null);
-  }, [workerAnalysis, allDepts, selectedDepts, roles]);
+  };
+
+  // Keep only seats of chosen departments, and no more than each role needs.
+  const pruneSeats = useCallback((sts) => {
+    const out = {};
+    for (const d of activeDepts) {
+      for (const r of roles) {
+        const need = (d.requirements || {})[r.id] || 0;
+        const list = ((sts[d.id] || {})[r.id] || []).filter((id) => units.some((w) => w.id === id)).slice(0, need);
+        if (list.length) (out[d.id] = out[d.id] || {})[r.id] = list;
+      }
+    }
+    return out;
+  }, [activeDepts, roles, units]);
+
+  // Fill every empty seat: keeps who's already seated, tries several fair
+  // arrangements and keeps the one that fills most, preferring people with
+  // fewer shifts this week.
+  const fillRest = useCallback((from) => {
+    const base = pruneSeats(from);
+    const taken = new Set(seatedIds(base));
+    const pool = relevantWorkers.filter((w) => !taken.has(w.id)).map((w) => w.id);
+    const reduced = activeDepts.map((d) => ({
+      ...d,
+      requirements: Object.fromEntries(roles.map((r) => [r.id, Math.max(0, ((d.requirements || {})[r.id] || 0) - ((base[d.id] || {})[r.id] || []).length)])),
+    }));
+    let best = null;
+    for (let i = 0; i < 16; i++) {
+      const res = autoAssign(roles, reduced, units, pool, state.departments);
+      const placed = Object.values(res.assignments).flatMap((r) => Object.values(r).flat());
+      const load = placed.reduce((n, id) => n + (weekCounts[id] || 0), 0);
+      if (!best || placed.length > best.n || (placed.length === best.n && load < best.load)) best = { res, n: placed.length, load };
+    }
+    const next = JSON.parse(JSON.stringify(base));
+    if (best) {
+      for (const dId of Object.keys(best.res.assignments)) {
+        for (const rId of Object.keys(best.res.assignments[dId])) {
+          const add = best.res.assignments[dId][rId];
+          if (add.length) ((next[dId] = next[dId] || {})[rId] = [...((next[dId] || {})[rId] || []), ...add]);
+        }
+      }
+    }
+    return next;
+  }, [pruneSeats, relevantWorkers, activeDepts, roles, units, state.departments, weekCounts]);
 
   const generate = () => {
-    if (selectedDepts.length === 0 || selectedWorkers.length === 0) return;
-    const res = autoAssign(roles, allDepts.filter((d) => selectedDepts.includes(d.id)), units, selectedWorkers, state.departments);
-    setResult(res);
+    if (selectedDepts.length === 0) return;
+    const sts = pruneSeats(seats);
+    const assignments = {};
+    const gaps = {};
+    for (const d of activeDepts) {
+      assignments[d.id] = {};
+      for (const r of roles) {
+        const need = (d.requirements || {})[r.id] || 0;
+        if (need === 0) continue;
+        const list = (sts[d.id] || {})[r.id] || [];
+        assignments[d.id][r.id] = [...list];
+        if (list.length < need) (gaps[d.id] = gaps[d.id] || {})[r.id] = need - list.length;
+      }
+    }
+    setResult({ assignments, gaps, unassigned: [] });
     setHistory([]);
     setSelectedSwapWorker(null);
     setWorkerTimeOverrides({});
@@ -594,19 +465,19 @@ export default function Shifts() {
     }
     setSelectedDepts(deptIds);
     setSelectedWorkers([...workerIds]);
+    setSeats(JSON.parse(JSON.stringify(sh.assignments || {})));
     setResult({ assignments: JSON.parse(JSON.stringify(sh.assignments || {})), gaps: JSON.parse(JSON.stringify(sh.gaps || {})), unassigned: [] });
     setDeptNameOverrides(sh.deptNames || {});
     setWorkerTimeOverrides(sh.workerTimes || {});
     setStep(4);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Arriving at the Workers step with nobody chosen yet: pre-pick the smallest
-  // team that covers every position, so the common case is just "Next".
+  // Arriving at the Workers step: keep the seats that still apply; an empty
+  // board arrives already filled fairly, so the common case is just "Next".
   useEffect(() => {
-    if (step === 3 && selectedWorkers.length === 0 && workerAnalysis.totalSlots > 0) {
-      smartSelect();
-      setAutoPicked(true);
-    }
+    if (step !== 3) return;
+    const kept = pruneSeats(seats);
+    updateSeats(seatedIds(kept).length === 0 ? fillRest(kept) : kept);
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const STEPS = [
@@ -618,7 +489,7 @@ export default function Shifts() {
   const reachable = (n) => n <= 2 || (n === 3 && selectedDepts.length > 0) || (n === 4 && !!result);
   const canNext = step === 1 ? true
     : step === 2 ? selectedDepts.length > 0
-      : step === 3 ? selectedWorkers.length > 0
+      : step === 3 ? seatTotals.filled > 0
         : !!result;
 
   const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -626,7 +497,7 @@ export default function Shifts() {
   const goNext = () => {
     if (!canNext) return;
     if (step === 3) {
-      if (!result) generate();
+      generate();
       goTo(4);
     } else if (step === 4) {
       save();
@@ -640,22 +511,9 @@ export default function Shifts() {
     if (step === 1) return hours.start && hours.end ? `${shiftLabel(shiftName)} · ⁦${hours.start}–${hours.end}⁩` : shiftLabel(shiftName);
     if (step === 2) return t('deptsSelected', { n: selectedDepts.length });
     if (step === 3) {
-      const cov = workerAnalysis.totalSlots > 0 && selectedWorkers.length > 0 ? ` · ${workerAnalysis.coverage}%` : '';
-      return `${t('summaryCounts', { depts: selectedDepts.length, workers: selectedWorkers.length })}${cov}`;
+      return t('sbSeatsFilled', { filled: seatTotals.filled, total: seatTotals.total });
     }
     return totalGaps > 0 ? t('openCount', { n: totalGaps }) : t('allFilledShort');
-  };
-
-  // Worker groups are picked by count, not one by one: keep the members that
-  // are already chosen, then fill up with the next free ones.
-  const setGroupCount = (groupId, members, count) => {
-    const memberIds = new Set(members.map((m) => m.id));
-    const chosen = members.filter((m) => selectedWorkers.includes(m.id));
-    const order = [...chosen, ...members.filter((m) => !selectedWorkers.includes(m.id))];
-    const n = Math.max(0, Math.min(members.length, count));
-    setSelectedWorkers([...selectedWorkers.filter((id) => !memberIds.has(id)), ...order.slice(0, n).map((m) => m.id)]);
-    setResult(null);
-    setAutoPicked(false);
   };
 
   const renderDeptButton = (d) => {
@@ -794,13 +652,6 @@ export default function Shifts() {
                   <h2 className="wizard-title">{t('wizWorkersTitle')}</h2>
                   <p className="wizard-sub">{t('wizWorkersSub')}</p>
                 </div>
-                <div className="section-actions">
-                  <button className="btn btn-sm btn-smart" onClick={() => { smartSelect(); setAutoPicked(true); }}>
-                    <Sparkles size={14} /> {t('smart')}
-                  </button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => { selectAllWorkers(); setAutoPicked(false); }}>{t('all')}</button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => { clearWorkers(); setAutoPicked(false); }}>{t('clear')}</button>
-                </div>
               </div>
 
               {hiddenBusy.count > 0 && (
@@ -813,60 +664,19 @@ export default function Shifts() {
               {relevantWorkers.length === 0 ? (
                 <div className="empty-state"><p>{t('noWorkersAvailable')} {shiftLabel(shiftName)} {t('on')} {fmtDate(date)}</p></div>
               ) : (
-                <>
-                  {autoPicked && selectedWorkers.length > 0 && (
-                    workerAnalysis.coverage === 100 ? (
-                      <div className="alert alert-info">
-                        <Sparkles size={16} />
-                        <span>{t('autoPickedHint')}</span>
-                      </div>
-                    ) : (
-                      <div className="alert alert-warning">
-                        <Sparkles size={16} />
-                        <span>{t('autoPickedPartial', { n: workerAnalysis.totalSlots - workerAnalysis.filledCount })}</span>
-                      </div>
-                    )
-                  )}
-
-                  {workerAnalysis.totalSlots > 0 && (
-                    <div className="coverage-section">
-                      <div className="coverage-bar-wrap">
-                        <div className="coverage-bar">
-                          <div
-                            className={`coverage-fill ${workerAnalysis.coverage === 100 ? 'coverage-full' : workerAnalysis.coverage >= 70 ? '' : 'coverage-low'}`}
-                            style={{ width: `${Math.max(workerAnalysis.coverage, 2)}%` }}
-                          />
-                        </div>
-                        <span className={`coverage-pct ${workerAnalysis.coverage === 100 ? 'coverage-pct-full' : ''}`}>
-                          {selectedWorkers.length > 0 ? `${workerAnalysis.coverage}%` : '—'}
-                        </span>
-                      </div>
-                      <div className="coverage-details">
-                        <span className="coverage-label">
-                          {t('positionsCovered', { filled: workerAnalysis.filledCount, total: workerAnalysis.totalSlots })}
-                          {workerAnalysis.coverage === 100 && <strong className="coverage-ready"> · {t('readyToAssign')}</strong>}
-                        </span>
-                        {workerAnalysis.gaps.length > 0 && (
-                          <div className="coverage-gaps">
-                            {workerAnalysis.gaps.map((g, i) => (
-                              <span key={i} className="coverage-gap-tag">{g.count} {g.role}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <WorkerPicker
-                    analysis={workerAnalysis}
-                    selected={selectedWorkers}
-                    onToggle={(id) => { toggleWorker(id); setAutoPicked(false); }}
-                    onGroupCount={setGroupCount}
-                    roles={roles}
-                    depts={allDepts.filter((d) => selectedDepts.includes(d.id))}
-                    allWorkers={state.workers}
-                  />
-                </>
+                <SeatBoard
+                  depts={activeDepts}
+                  roles={roles}
+                  candidates={relevantWorkers}
+                  canFill={canFill}
+                  seats={seats}
+                  onChange={updateSeats}
+                  onFillRest={() => updateSeats(fillRest(seats))}
+                  onClear={() => updateSeats({})}
+                  weekCounts={weekCounts}
+                  groupName={(id) => (state.workers.find((g) => g.id === id) || {}).name || '?'}
+                  deptLabel={getDeptLabel}
+                />
               )}
             </section>
           )}
@@ -1021,9 +831,7 @@ export default function Shifts() {
               <span className="wizard-bar-detail">{barInfo()}</span>
             </div>
             <button type="button" className="btn btn-primary btn-lg" onClick={goNext} disabled={!canNext}>
-              {step === 3
-                ? <><Zap size={18} /> {t('autoAssignShift')}</>
-                : step === 4
+              {step === 4
                   ? <><Save size={18} /> {existingShiftForSlot ? t('updateShift') : t('saveShift')}</>
                   : <>{t('next')} <ArrowRight size={18} className="flip-rtl" /></>}
             </button>
